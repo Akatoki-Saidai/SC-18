@@ -41,7 +41,10 @@ void setup(){
 }
 
 void loop(){
- temp=bme.readTemperature();                                                  //BME280
+
+  while(){
+    stoppage();
+  temp=bme.readTemperature();                                                  //BME280
   pressure=bme.readPressure() / 100.0F;
   humid=bme.readHumidity();
   Serial.print("温度 ;");
@@ -56,6 +59,20 @@ void loop(){
   Serial.println(" %");
   Serial.println();
   delay(1000);
+    }
+
+    Serial.println("Phase 2");
+
+    delay(10000);                                                               //nicromeewire
+   Serial.print("WARNING: 9v voltage on.\n");
+   digitalWrite(cutparac, HIGH); //オン
+   delay(outputcutsecond*1000);//十秒間電流を流す
+   Serial.print("WARNING: 9v voltage off.\n");
+   digitalWrite(cutparac, LOW); //オフ
+
+    forward();      //forward after subcarrier deployment
+    delay(3000);
+    
   
    while (Serial1.available() > 0) {                                            //GPS
     char c = Serial1.read();
@@ -65,6 +82,8 @@ void loop(){
       Serial.print("LONG: "); Serial.println(gps.location.lng(), 9);
     }
   }
+
+    
    //stoppage();                                                                //motor
   //delay(5000);
   forward();
