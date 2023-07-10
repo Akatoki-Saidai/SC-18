@@ -74,28 +74,6 @@ void loop(){
     delay(3000);
     
   
-   while (Serial1.available() > 0) {                                            //GPS
-    char c = Serial1.read();
-    gps.encode(c);
-    if (gps.location.isUpdated()) {
-      Serial.print("LAT:  "); Serial.println(gps.location.lat(), 9);
-      Serial.print("LONG: "); Serial.println(gps.location.lng(), 9);
-    }
-  }
-
-    
-   //stoppage();                                                                //motor
-  //delay(5000);
-  forward();
-  Serial2.println("forward now");
-  delay(10000);
-  rotating();
-  Serial2.println("rotating now");
-  delay(10000);
-  reverse_rotating();
-  Serial2.println("reverse_rotating now");
-  delay(10000);
-  
 }
 
 // 前進
