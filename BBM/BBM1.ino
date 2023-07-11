@@ -6,6 +6,15 @@ float temp;
 float pressure;
 float humid;
 
+#include <Wire.h>　　　　　　　　　　　　　　　　　　　　　　　　　　　　//BNO055
+#include <Adafruit_BNO055.h>
+#include <Ticker.h>
+Ticker bno055ticker; //タイマー割り込み用のインスタンス
+#define BNO055interval 10 //何ms間隔でデータを取得するか
+//Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28, &Wire); //ICSの名前, デフォルトアドレス, 謎
+Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
+
+
 #include <TinyGPS++.h>                                                     //GPS
 TinyGPSPlus gps;
 
@@ -47,6 +56,7 @@ void reverse_rotating()
 
 
 
+
 void setup(){
   
  Serial.begin(115200);                                                       //BME280
@@ -74,12 +84,51 @@ void setup(){
     digitalWrite(cutparac, LOW);    //切り離し用トランジスタの出力オフ
     Serial.begin(115200);
 
-//phase0
-  Serial.println("Pase 0");
 
-    while(){
-    stoppage();
-  temp=bme.readTemperature();                                                  //BME280
+    delay(10000);                                                               //nicromeewire
+   Serial.print("WARNING: 9v voltage on.\n");
+   digitalWrite(cutparac, HIGH); //オン
+   delay(outputcutsecond*1000);//十秒間電流を流す
+   Serial.print("WARNING: 9v voltage off.\n");
+   digitalWrite(cutparac, LOW); //オフ
+      delay(5000);
+
+
+    pinMode(21, INPUT_PULLUP); //SDA 21番ピンのプルアップ(念のため)              //BNO055
+  pinMode(22, INPUT_PULLUP); //SDA 22番ピンのプルアップ(念のため)
+
+  Serial.begin(115200);
+  Serial.println("Orientation Sensor Raw Data Test"); Serial.println("");
+
+  if (!bno.begin()) // センサの初期化
+  {
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    while (1);
+  }
+
+  delay(10000);
+
+  /* Display the current temperature */
+  int8_t temp = bno.getTemp();
+  Serial.print("Current Temperature: ");
+  Serial.print(temp);
+  Serial.println(" C");
+  Serial.println("");
+
+  bno.setExtCrystalUse(false);
+
+  Serial.println("Calibration status values: 0=uncalibrated, 3=fully calibrated");
+  bno055ticker.attach_ms(BNO055interval, get_bno055_data);
+}
+
+
+    
+}
+
+void loop(){
+  forward();                                   //moter
+  
+    temp=bme.readTemperature();                                                  //BME280
   pressure=bme.readPressure() / 100.0F;
   humid=bme.readHumidity();
   Serial.print("温度 ;");
@@ -94,41 +143,89 @@ void setup(){
   Serial.println(" %");
   Serial.println();
   delay(1000);
-    }
 
-    Serial.println("Phase 1");
+  void get_bno055_data(void)                                   //BNO055
+{
+  // Possible vector values can be:
+  // - VECTOR_ACCELEROMETER - m/s^2
+  // - VECTOR_MAGNETOMETER  - uT
+  // - VECTOR_GYROSCOPE     - rad/s
+  // - VECTOR_EULER         - degrees
+  // - VECTOR_LINEARACCEL   - m/s^2
+  // - VECTOR_GRAVITY       - m/s^2
+  
+  /*
+  // キャリブレーションのステータスの取得と表示
+  uint8_t system, gyro, accel, mag = 0;
+  bno.getCalibration(&system, &gyro, &accel, &mag);
+  Serial.print("CALIB Sys:");
+  Serial.print(system, DEC);
+  Serial.print(", Gy");
+  Serial.print(gyro, DEC);
+  Serial.print(", Ac");
+  Serial.print(accel, DEC);
+  Serial.print(", Mg");
+  Serial.print(mag, DEC);
+  */
+  
+  /*
+  // ジャイロセンサ値の取得と表示
+  imu::Vector<3> gyroscope = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+  Serial.print(" 　Gy_xyz:");
+  Serial.print(gyroscope.x());
+  Serial.print(", ");
+  Serial.print(gyroscope.y());
+  Serial.print(", ");
+  Serial.print(gyroscope.z());
+  */
+  
 
-    delay(10000);                                                               //nicromeewire
-   Serial.print("WARNING: 9v voltage on.\n");
-   digitalWrite(cutparac, HIGH); //オン
-   delay(outputcutsecond*1000);//十秒間電流を流す
-   Serial.print("WARNING: 9v voltage off.\n");
-   digitalWrite(cutparac, LOW); //オフ
-      delay(5000);
+  // 加速度センサ値の取得と表示
+  imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+  Serial.print(" 　Ac_xyz:");
+  Serial.print(accelermetor.x());
+  Serial.print(", ");
+  Serial.print(accelermetor.y());
+  Serial.print(", ");
+  Serial.print(accelermetor.z());
 
-    forward();      //forward after subcarrier deployment
-    delay(3000);
-      stoppage();
-    
+  
+  
+  // 磁力センサ値の取得と表示
+  imu::Vector<3> magnetmetor = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
+  Serial.print(" 　Mg_xyz:");
+  Serial.print(magnetmetor .x());
+  Serial.print(", ");
+  Serial.print(magnetmetor .y());
+  Serial.print(", ");
+  Serial.print(magnetmetor .z());
+  
+  /*
+  // センサフュージョンによる方向推定値の取得と表示
+  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  Serial.print(" 　DIR_xyz:");
+  Serial.print(euler.x());
+  Serial.print(", ");
+  Serial.print(euler.y());
+  Serial.print(", ");
+  Serial.print(euler.z());
+*/
+  /*
+    // センサフュージョンの方向推定値のクオータニオン
+    imu::Quaternion quat = bno.getQuat();
+    Serial.print("qW: ");
+    Serial.print(quat.w(), 4);
+    Serial.print(" qX: ");
+    Serial.print(quat.x(), 4);
+    Serial.print(" qY: ");
+    Serial.print(quat.y(), 4);
+    Serial.print(" qZ: ");
+    Serial.print(quat.z(), 4);
+    Serial.print("\t\t");
+  */
 
-    Serial2.prinln("calibration rotating");                 //calibration
-  while(CalibrationCounter < 551){
-    Vector norm = compass.readNormalize();
-    rotating();
-    if(CalibrationCounter == 550){
-      stopppage();
-      Serial2.println("calibration stopping");
-      delay(2000);
-      CalibrationCounter = CalibrationCounter + 1;
-    }else{
-      CalibrationCounter = CalibrationCOunter + 1;
-      Serial2.print(CalibrationCounter = ");
-      Serial2.println(CalibrationCounter);
-    }
-  }
-}
-
-void loop(){
+  Serial.println();
+  
 
 
 
