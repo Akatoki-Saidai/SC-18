@@ -225,6 +225,16 @@ void loop(){
   */
 
   Serial.println();
+
+  //GPS
+  while (Serial1.available() > 0) {
+    char c = Serial1.read();
+    gps.encode(c);
+    if (gps.location.isUpdated()) {
+      Serial.print("LAT:  "); Serial.println(gps.location.lat(), 9);
+      Serial.print("LONG: "); Serial.println(gps.location.lng(), 9);
+    }
+  }
   
 
 
