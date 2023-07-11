@@ -1,0 +1,40 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+//1013.25は地球の海面上の大気圧の平均値(1気圧)です。
+#define SEALEVELPRESSURE_HPA (1013.25)
+Adafruit_BME280 bme;
+
+float temp;
+float pressure;
+float humid;
+float altitude;//高度
+
+void setup() {
+  Serial.begin(115200);
+  bool status;
+  status = bme.begin(0x76);  
+
+  delay(1000);
+}
+void loop() { 
+  temp=bme.readTemperature();
+  pressure=bme.readPressure() / 100.0F;
+  humid=bme.readHumidity();
+  altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+  Serial.print("温度 ;");
+  Serial.print(temp);
+  Serial.println(" °C");
+  Serial.print("高度:");
+  Serial.print(altitude);
+  Serial.println("m");
+   
+  Serial.print("気圧 ;");
+  Serial.print(pressure);
+  Serial.println(" hPa");
+  Serial.print("湿度 ;");
+  Serial.print(humid);
+  Serial.println(" %");
+  Serial.println();
+  delay(1000);
+}
