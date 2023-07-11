@@ -12,71 +12,7 @@ TinyGPSPlus gps;
 int cutparac = 23;          //切り離し用トランジスタのピン番号の宣言           //nicromewire
 int outputcutsecond = 3;    //切り離し時の9V電圧を流す時間，単位はsecond
 
-void setup(){
-  
- Serial.begin(115200);                                                       //BME280
-  bool status;
-  status = bme.begin(0x76);  
-  while (!status) {
-    Serial.println("BME280 sensorが使えません");
-    delay(1000);}
-    
-    Serial.begin(115200);                                                    //GPS
-  Serial1.begin(9600,SERIAL_8N1,5,18); 
-    
-    Serial.begin(115200);                                                    //motor
-  ledcSetup(0, 490, 8);
-  ledcSetup(1, 490, 8);
-  ledcSetup(2, 490, 8);
-  ledcSetup(3, 490, 8);
-
-  ledcAttachPin(32, 0);
-  ledcAttachPin(33, 1);
-  ledcAttachPin(26, 2);
-  ledcAttachPin(25, 3);
-  
-   pinMode(cutparac, OUTPUT);      //切り離し用トランジスタの出力宣言           //nicromewire
-    digitalWrite(cutparac, LOW);    //切り離し用トランジスタの出力オフ
-    Serial.begin(115200);
-}
-
-void loop(){
-
-  while(){
-    stoppage();
-  temp=bme.readTemperature();                                                  //BME280
-  pressure=bme.readPressure() / 100.0F;
-  humid=bme.readHumidity();
-  Serial.print("温度 ;");
-  Serial.print(temp);
-  Serial.println(" °C");
-   
-  Serial.print("気圧 ;");
-  Serial.print(pressure);
-  Serial.println(" hPa");
-  Serial.print("湿度 ;");
-  Serial.print(humid);
-  Serial.println(" %");
-  Serial.println();
-  delay(1000);
-    }
-
-    Serial.println("Phase 2");
-
-    delay(10000);                                                               //nicromeewire
-   Serial.print("WARNING: 9v voltage on.\n");
-   digitalWrite(cutparac, HIGH); //オン
-   delay(outputcutsecond*1000);//十秒間電流を流す
-   Serial.print("WARNING: 9v voltage off.\n");
-   digitalWrite(cutparac, LOW); //オフ
-
-    forward();      //forward after subcarrier deployment
-    delay(3000);
-    
-  
-}
-
-// 前進
+// 前進                            //motor
 void forward()
 {
   ledcWrite(0, 0); // channel, duty
@@ -107,12 +43,96 @@ void reverse_rotating()
   ledcWrite(1, 0);
   ledcWrite(2, 0);
   ledcWrite(3, 5000);
+}
 
-   delay(10000);           //nicromewire
+
+
+void setup(){
+  
+ Serial.begin(115200);                                                       //BME280
+  bool status;
+  status = bme.begin(0x76);  
+  while (!status) {
+    Serial.println("BME280 sensorが使えません");
+    delay(1000);}
+    
+    Serial.begin(115200);                                                    //GPS
+  Serial1.begin(9600,SERIAL_8N1,5,18); 
+    
+    Serial.begin(115200);                                                    //motor
+  ledcSetup(0, 490, 8);
+  ledcSetup(1, 490, 8);
+  ledcSetup(2, 490, 8);
+  ledcSetup(3, 490, 8);
+
+  ledcAttachPin(32, 0);
+  ledcAttachPin(33, 1);
+  ledcAttachPin(26, 2);
+  ledcAttachPin(25, 3);
+  
+   pinMode(cutparac, OUTPUT);      //切り離し用トランジスタの出力宣言           //nicromewire
+    digitalWrite(cutparac, LOW);    //切り離し用トランジスタの出力オフ
+    Serial.begin(115200);
+
+//phase0
+  Serial.println("Pase 0");
+
+    while(){
+    stoppage();
+  temp=bme.readTemperature();                                                  //BME280
+  pressure=bme.readPressure() / 100.0F;
+  humid=bme.readHumidity();
+  Serial.print("温度 ;");
+  Serial.print(temp);
+  Serial.println(" °C");
+   
+  Serial.print("気圧 ;");
+  Serial.print(pressure);
+  Serial.println(" hPa");
+  Serial.print("湿度 ;");
+  Serial.print(humid);
+  Serial.println(" %");
+  Serial.println();
+  delay(1000);
+    }
+
+    Serial.println("Phase 1");
+
+    delay(10000);                                                               //nicromeewire
    Serial.print("WARNING: 9v voltage on.\n");
    digitalWrite(cutparac, HIGH); //オン
    delay(outputcutsecond*1000);//十秒間電流を流す
    Serial.print("WARNING: 9v voltage off.\n");
    digitalWrite(cutparac, LOW); //オフ
+      delay(5000);
 
+    forward();      //forward after subcarrier deployment
+    delay(3000);
+      stoppage();
+    
+
+    Serial2.prinln("calibration rotating");                 //calibration
+  while(CalibrationCounter < 551){
+    Vector norm = compass.readNormalize();
+    rotating();
+    if(CalibrationCounter == 550){
+      stopppage();
+      Serial2.println("calibration stopping");
+      delay(2000);
+      CalibrationCounter = CalibrationCounter + 1;
+    }else{
+      CalibrationCounter = CalibrationCOunter + 1;
+      Serial2.print(CalibrationCounter = ");
+      Serial2.println(CalibrationCounter);
+    }
+  }
+}
+
+void loop(){
+
+
+
+    
+    
+  
 }
