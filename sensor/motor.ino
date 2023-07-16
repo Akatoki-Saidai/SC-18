@@ -28,22 +28,16 @@ void setup() {
     }
   }
   */
+
+  stoppage();
+  delay(2000);
   
 }
 
 void loop() {
 
-  //stoppage();
-  //delay(5000);
+
   forward();
-  Serial2.println("forward now");
-  delay(10000);
-  rotating();
-  Serial2.println("rotating now");
-  delay(10000);
-  reverse_rotating();
-  Serial2.println("reverse_rotating now");
-  delay(10000);
   
 }
 
