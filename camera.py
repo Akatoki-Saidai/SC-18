@@ -66,8 +66,6 @@ while True:
             # 最大の領域の面積を表示する
             cv2.putText(frame, str(area), (rect[0], rect[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 1)
 
-    else:
-        continue
 
 
     # 面積のもっとも大きい領域を表示
