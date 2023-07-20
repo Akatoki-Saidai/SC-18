@@ -20,20 +20,21 @@ float altitude;
 #include <Adafruit_BNO055.h>
 #include <Adafruit_Sensor.h>
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
+int CalibrationCounter = 1;  //キャリブレーションで取得したデータの個数
+double declinationAngle; //補正用
+double heading;  //弧度法
+double headingDegrees;  //度数法
+double Sum_headingDegrees;  //連続15個のheadingDegreesの和
+double Angle_gy271;  //連続15個の平均値（度数法）
 
-
-//CDcard
-#include <SPI.h> // SDカードはSPI通信
-#include <SD.h>
-File CanSatLogData;
-File SensorData;
-const int sck = 13, miso = 15, mosi = 14, ss = 27;
 
 //GPS
 #include <TinyGPS++.h>
 #inlcude<HardwareSerial.h>
 TinyGPSlus gps;
 HardwareSerial SerialGPS(1);
+double gps_latitude, gps_longitude, gps_velocity;
+int gps_time;
 double GOAL_lat = ;
 double GOAL_lng = ;
 
@@ -45,9 +46,33 @@ int outputcutsecond = 3;
 //forward
 void forward(){
   ledWrite(0,0);
-  ledWrite(1,10000);
+  ledWrite(1,5000);
   ledWrite(2,0);
-  ledWrite(3,10000);
+  ledWrite(3,5000);
+}
+//accel
+void accel()
+{
+  for (int i = 0; i < 2500; i = i + 10)
+  {
+    ledcWrite(0, 0);
+    ledcWrite(1, i);
+    ledcWrite(2, 0);
+    ledcWrite(3, i);
+    delay(80); // accelではdelay使う
+  }
+}
+//brake
+void brake()
+{
+  for (int i = 2500; i > 0; i = i - 10)
+  {
+    ledcWrite(0, 0);
+    ledcWrite(1, i);
+    ledcWrite(2, 0);
+    ledcWrite(3, i);
+    delay(80); // stoppingではdelay使う
+  }
 }
 //stop
 void stoppage(){
@@ -71,9 +96,58 @@ void reverse_rotating(){
   ledWrite(3,5000);
 }
 
+//Raspberry Pi 通信
+HardwareSerial Serial2(1);  //UART2
+
+//緯度経度から距離を返す関数
+double CalculateDis(double GOAL_lng, double GOAL_lat, double gps_longitude, double gps_latitude){
+  GOAL_lng = deg2red(GOAL_lng);
+  GOAL_lat = deg2red(GOAL_lat);
+
+  gps_longitude = deg2rad(gps_longitude);
+  gps_latitude = deg2rad(gps_latitude);
+
+  double EarthRadius = 6378.137;
+
+  // 目標地点までの距離を導出
+  delta_lng = GOAL_lng - gps_longitude;
+
+  distance = EarthRadius * acos(sin(gps_latitude) * sin(GOAL_lat) + cos(gps_latitude) * cos(GOAL_lat) * cos(delta_lng)) * 1000;
+
+  return distance;
+}
+
+// 角度計算用の関数
+double CalculateAngle(double GOAL_lng, double GOAL_lat, double gps_longitude, double gps_latitude)
+{
+
+  GOAL_lng = deg2rad(GOAL_lng);
+  GOAL_lat = deg2rad(GOAL_lat);
+
+  gps_longitude = deg2rad(gps_longitude);
+  gps_latitude = deg2rad(gps_latitude);
+
+  // 目標地点までの角度を導出
+  delta_lng = GOAL_lng - gps_longitude;
+  azimuth = rad2deg(atan2(sin(delta_lng), cos(gps_latitude) * tan(GOAL_lat) - sin(gps_latitude) * cos(delta_lng)));
+
+  if (azimuth < 0)// azimuthを0°～360°に収める
+  {
+    azimuth += 360;
+  }
+  else if (azimuth > 360)
+  {
+    azimuth -= 360;
+  }
+  return azimuth;
+}
+
 
 void setup(){
   Serial.begin(115200);
+
+//Raspberry Pi
+  Serial2.begin(19200,SERIAL_BN1,33,32);
 
 //BME280
   bool status = bme.begin(0x76);
@@ -82,15 +156,6 @@ void setup(){
     while(1);
   }
 
-// SD Card initialization
-  SPI.begin(sck, miso, mosi, ss);
-  SD.begin(ss, SPI);
-  CanSatLogData = SD.open("/CanSatLogData.txt", FILE_APPEND);
-  SensorData = SD.open("/SensorData.csv", FILE_APPEND);
-  CanSatLogData.println("START_RECORD");
-  CanSatLogData.flush();
-  SensorData.println("gps_time,gps_latitude,gps_longitude,gps_velocity,Temperature,Pressure,Humid,accelX,accelY,accelZ,Angle_gy271,ultra_distance");
-  SensorData.flush();
 
 //GPS
     Serial1.begin(9600,SERIAL_8N1,5,18);
@@ -128,18 +193,8 @@ void setup(){
     while (1);
   }
 
+    /*
 //BNO055
-  /* Display the current temperature */
-  /*
-  int8_t temp = bno.getTemp();
-  Serial.print("Current Temperature: ");
-  Serial.print(temp);
-  Serial.println(" C");
-  Serial.println("");
-
-  bno.setExtCrystalUse(false);
-  
-
   Serial.println("Calibration status values: 0=uncalibrated, 3=fully calibrated");
   bno055ticker.attach_ms(BNO055interval, get_bno055_data);
   */
@@ -149,12 +204,6 @@ void setup(){
 
 
 void loop(){
-
-
-  //motor
-  forward();
-  //motor
-
 
 //BME280
   temp=bme.readTemperature();
