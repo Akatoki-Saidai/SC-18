@@ -30,7 +30,7 @@ double Angle_gy271;  //連続15個の平均値（度数法）
 
 //GPS
 #include <TinyGPS++.h>
-#inlcude<HardwareSerial.h>
+#inlcude <HardwareSerial.h>
 TinyGPSlus gps;
 HardwareSerial SerialGPS(1);
 double gps_latitude, gps_longitude, gps_velocity;
@@ -99,6 +99,54 @@ void reverse_rotating(){
 //Raspberry Pi 通信
 HardwareSerial Serial2(1);  //UART2
 
+int phase = 0;
+int phase_state = 0;
+
+// for phase1
+int mode_comparison = 0;
+int mode_to_bmp = 0;
+int count1 = 0;
+int count3 = 0;
+double altitude_sum_bmp = 0;
+double altitude,previous_altitude,current_altitude;
+unsigned long previous_millis,current_millis;
+
+// for phase2
+int type = 1;
+int yeah = 1;
+int type_state = 0;
+double time3_2; // 時間に関するもの
+double Accel[6];                  // 計測した値をおいておく変数
+double Altitude[6];               // 高度
+double Preac, differ1, Acsum, Acave, RealDiffer1;
+double Preal, differ2, Alsum, Alave, RealDiffer2;
+int i_3 = 0;
+int j_3 = 0;
+double RealDiffer;
+
+// for phase3
+int cutparac = 23;          // 切り離し用トランジスタのピン番号の宣言
+int outputcutsecond = 3;    // 切り離し時の9V電圧を流す時間，単位はsecond
+
+// for phase4
+double desiredDistance = 10.0; //遠距離フェーズから中距離フェーズに移行する距離
+double CurrentDistance;
+double Angle_Goal,rrAngle,llAngle;
+
+// for phase5
+double sum_latitude,sum_longitude;
+unsigned long nowmillis;
+int sum_count = 0;
+int EPSILON = 30;
+
+// for phase6
+double current_distance,previous_distance,distance1,distance2;
+unsigned long current_Millis,time1,time2;
+int phase_5 = 1;
+int count = 0;
+int accel_count = 1;
+
+
 //緯度経度から距離を返す関数
 double CalculateDis(double GOAL_lng, double GOAL_lat, double gps_longitude, double gps_latitude){
   GOAL_lng = deg2red(GOAL_lng);
@@ -141,6 +189,7 @@ double CalculateAngle(double GOAL_lng, double GOAL_lat, double gps_longitude, do
   }
   return azimuth;
 }
+
 
 
 void setup(){
@@ -204,30 +253,22 @@ void setup(){
 
 
 void loop(){
+  while (Serial1.available() > 0) {
+  char c = Serial1.read();
+  gps.encode(c);
+  if (gps.location.isUpdated()) {
 
 //BME280
-  temp=bme.readTemperature();
-  pressure=bme.readPressure() / 100.0F;
-  humid=bme.readHumidity();
-  altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
-  Serial.print("温度 ;");
-  Serial.print(temp);
-  Serial.println(" °C");
-  Serial.print("高度:");
-  Serial.print(altitude-30);
-  Serial.println("m");
-   
-  Serial.print("気圧 ;");
-  Serial.print(pressure);
-  Serial.println(" hPa");
-  Serial.print("湿度 ;");
-  Serial.print(humid);
-  Serial.println(" %");
-  delay(1000);
-//BME280
+  temp=bme.readTemperature();  //温度
+  pressure=bme.readPressure() / 100.0F;  //気圧
+  humid=bme.readHumidity();  //湿度
+  altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);  //高度
 
-  
-  
+//GPS
+  gps_latitude = gps.location.lat();
+  gps_longitude = gps.location.lng();
+  gps_time = gps.time.value();
+  gps_velocity = gps.speed.mps();
 
 //BNO055
   // Possible vector values can be:
@@ -237,10 +278,10 @@ void loop(){
   // - VECTOR_EULER         - degrees
   // - VECTOR_LINEARACCEL   - m/s^2
   // - VECTOR_GRAVITY       - m/s^2
-  
   // キャリブレーションのステータスの取得と表示
   uint8_t system, gyro, accel, mag = 0;
   bno.getCalibration(&system, &gyro, &accel, &mag);
+/*
   Serial.print("CALIB Sys:");
   Serial.print(system, DEC);
   Serial.print(", Gy");
@@ -249,75 +290,26 @@ void loop(){
   Serial.print(accel, DEC);
   Serial.print(", Mg");
   Serial.print(mag, DEC);
-  
+*/
   // ジャイロセンサ値の取得と表示
   imu::Vector<3> gyroscope = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-  Serial.print(" 　Gy_xyz:");
-  Serial.print(gyroscope.x());
-  Serial.print(", ");
-  Serial.print(gyroscope.y());
-  Serial.print(", ");
-  Serial.print(gyroscope.z());
-  
-  
   // 加速度センサ値の取得と表示
   imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-  Serial.print(" 　Ac_xyz:");
-  Serial.print(accelermetor.x());
-  Serial.print(", ");
-  Serial.print(accelermetor.y());
-  Serial.print(", ");
-  Serial.print(accelermetor.z());
-
- 
   // 磁力センサ値の取得と表示
   imu::Vector<3> magnetmetor = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
-  Serial.print(" 　Mg_xyz:");
-  Serial.print(magnetmetor .x());
-  Serial.print(", ");
-  Serial.print(magnetmetor .y());
-  Serial.print(", ");
-  Serial.print(magnetmetor .z());
-  
-  
-  /*
-  // センサフュージョンによる方向推定値の取得と表示
-  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-  Serial.print(" 　DIR_xyz:");
-  Serial.print(euler.x());
-  Serial.print(", ");
-  Serial.print(euler.y());
-  Serial.print(", ");
-  Serial.print(euler.z());
-*/
-  /*
-    // センサフュージョンの方向推定値のクオータニオン
-    imu::Quaternion quat = bno.getQuat();
-    Serial.print("qW: ");
-    Serial.print(quat.w(), 4);
-    Serial.print(" qX: ");
-    Serial.print(quat.x(), 4);
-    Serial.print(" qY: ");
-    Serial.print(quat.y(), 4);
-    Serial.print(" qZ: ");
-    Serial.print(quat.z(), 4);
-    Serial.print("\t\t");
-  */
 
-  Serial.println();
-  delay(1000);
-//BNO055
-  
-  
-//GPS
-  while (Serial1.available() > 0) {
-    char c = Serial1.read();
-    gps.encode(c);
-    if (gps.location.isUpdated()) {
-      Serial.print("LAT:  "); Serial.println(gps.location.lat(), 9);
-      Serial.print("LONG: "); Serial.println(gps.location.lng(), 9);
-    }
-  }
-//GPS
+
+  switch(phase){
+    case 0:
+      if(phase_state != 1){
+        Serial.println("Phase1");
+        Serial2.write(gps_time);
+
+        phase_state = 1;
+      }
+    if(mode_to_bmp == 0){
+      
+    
+      
      
 }
