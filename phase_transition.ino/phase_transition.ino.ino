@@ -34,17 +34,6 @@ void loop()
         gps_longitude = gps.location.lng();       
         gps_time = gps.time.value();
         gps_velocity = gps.speed.mps();
-        
-        // for HY-SRF05
-        digitalWrite(trigPin, LOW); 
-        delay(2); 
-        digitalWrite( trigPin, HIGH ); // 超音波を10ms間送信
-        delay(10);
-        digitalWrite( trigPin, LOW ); // 超音波を停止      
-        Duration = pulseIn( echoPin, HIGH ); // センサからの入力
-        if (Duration > 0) {
-          Duration = Duration/2; // 往復距離を半分にする
-          ultra_distance = Duration*(331.5+0.6*Temperature)*100/1000000; // 音速を340m/sに設定
         } 
 
           //########## 遠距離フェーズ ##########
