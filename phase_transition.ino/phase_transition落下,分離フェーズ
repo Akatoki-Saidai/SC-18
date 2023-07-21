@@ -1,0 +1,325 @@
+// for calculation
+#include <math.h>
+#define rad2deg(a) ((a) / M_PI * 180.0) /* rad を deg に換算するマクロ関数 */
+#define deg2rad(a) ((a) / 180.0 * M_PI) /* deg を rad に換算するマクロ関数 */
+
+
+
+// for GY-271
+#include <DFRobot_QMC5883.h>
+DFRobot_QMC5883 compass;
+int CalibrationCounter = 1; // キャリブレーションで取得したデータの個数
+double declinationAngle; // 補正用
+double heading; // 弧度法
+double headingDegrees; // 度数法
+double Sum_headingDegrees; // 連続15個のheadingDegreesの和
+double Angle_gy271; // 連続15個の平均値(度数法)
+//上記のやつがどうしてもBNO055に置き換えができない（GY-271が地磁気の役目）
+
+void loop()
+{
+  if (Serial1.available() > 0) // "Serial1.available() > 0"がないとGPS使えない
+  { 
+    char c = Serial1.read();
+    gps.encode(c);
+    if (gps.location.isUpdated()) // この中でGPSのデータを使わないと，うまく値が表示されない
+    { 
+        //現在時刻を保存
+        currentMillis = millis();
+        
+        // センサー値取得
+        // for BME280
+        Temperature = bme.readTemperature();
+        Pressure = bme.readPressure() / 100.0;
+        Humid = bme.readHumidity();
+        altitude = ( ( pow( 1013.25 /Pressure , 1/5.257) - 1 ) * ( Temperature + 273.15 ) ) / 0.0065;
+
+        // for MPU6050、BNO055でもいけるか？(mysensor.accelupdateの部分がBNOと違うかも)
+        mySensor.accelUpdate();
+        if (mySensor.accelUpdate() == 0)
+        {
+          accelX = accelermetor.x();
+          accelY = accelermetor.y();
+          accelZ = accelermetor.z();
+          accelSqrt = mySensor.accelSqrt();//これはライブラリに入ってない可能性があるためｘｙｚ軸の加速度から計算する必要があるかも (accelermetor.x+accelermetor.y+accelermetor.z)^(1/2)
+          if(fabs(accelZ)>4.0){
+            ESP.restart();
+          }
+        }
+
+        // for GPS
+        gps_latitude = gps.location.lat();
+        gps_longitude = gps.location.lng();       
+        gps_time = gps.time.value();
+        gps_velocity = gps.speed.mps();
+
+        // for ガイガーカウンタ
+        A_num1 = 0;
+        A_num2 = 0;
+        while(Serial1.available()){
+          char data = Serial1.read();
+          if(data == 'A'){
+            A_num1 = 1;
+          }
+          if(A_num1 > 0){
+            A_num1 = A_num1 + 1;
+            if(A_num1 > 12 && A_num2 < 1){
+              Serial.print(data);
+            }
+            if(data == 'h'){
+              A_num2 = 1;
+            }
+          }
+        }
+        
+        SensorData.flush(); 
+
+        // 各フェーズごとの記述
+        switch(phase)
+        {
+          //########## 待機フェーズ ##########
+          case 1:
+            if(phase_state != 1)
+            {
+              Serial2.println("Phase1: transition completed");
+              // LogDataの保存
+              CanSatLogData.println(gps_time);
+              CanSatLogData.println("Phase1: transition completed");
+              CanSatLogData.flush();
+
+              //台の向きを横向きにする
+              servo1.write(90);
+
+              phase_state = 1;
+            }
+
+            if (mode_to_bmp == 0)
+            {
+              if (accelZ < -2)
+              { //落下開始をまずMPUで判定　ここをBNOで判定するようにする(多分完了)
+                count1++;
+                if (count1 == 1)
+                {
+                  count1 = 0;
+                  CanSatLogData.println(gps_time);
+                  CanSatLogData.println("FALL STARTED(by BNO)\n");
+                  CanSatLogData.flush();
+                  mode_to_bmp = 1;
+                }
+              }
+            }
+            else
+            {
+              switch (mode_comparison)
+              { //落下開始をBMPで判定
+                case 0:
+                  previous_millis = millis();
+                  altitude_sum_bmp += altitude;
+                  count3++;
+                  if (count3 == 5)
+                  {
+                    previous_altitude = altitude_sum_bmp / 5;
+                    altitude_sum_bmp = 0;
+                    count3 = 0;
+                    mode_comparison = 1;
+                  }
+                  break;
+
+                case 1: // 500ms後
+                  current_millis = millis();
+                  if (current_millis - previous_millis >= 500)
+                  {
+                    altitude_sum_bmp += altitude;
+                    count3++;
+                    if (count3 == 5)
+                    {
+                      current_altitude = altitude_sum_bmp / 5;
+                      CanSatLogData.println("current_altitude - previous_altitude = \n");
+                      CanSatLogData.println(current_altitude - previous_altitude);
+                      if (current_altitude - previous_altitude <= -1.0)
+                      {
+                        CanSatLogData.println("FALL STARTED(by BMP)\n");
+                        CanSatLogData.flush();
+                        phase = 2;
+                      }
+                      else
+                      {
+                        altitude_sum_bmp = 0;
+                        count3 = 0;
+                        mode_comparison = 0;
+                      }
+                    }
+                  }
+                  break;
+              }
+            }
+            
+            break;
+
+          //########## 落下フェーズ ##########
+          case 2:
+            if(phase_state != 2)
+            {
+              Serial2.println("Phase2: transition completed");
+              // LogDataの保存
+              CanSatLogData.println(gps_time);
+              CanSatLogData.println("Phase2: transition completed");
+              CanSatLogData.flush();
+
+              i_3 = 0;
+              j_3 = 0;
+              Preac = 0; // 1個前の加速度を記憶
+              Preal = 0;
+              differ1 = 0.1;   // 加速度　移動平均の差
+              differ2 = 0.5;   // 高度　　移動平均の差
+              Acave = 0;       // 加速度　5個の平均値
+              Alave = 0;       // 高度　　5個の平均値
+              Acsum = 0;       // 加速度　5個の合計値
+              Alsum = 0;       // 高度　　5個の合計値
+              RealDiffer1 = 0; // 1秒前との差を記憶する
+              RealDiffer2 = 0;
+
+              phase_state = 2;
+            }
+            if (yeah == 1)
+            { // データを初めから五個得るまで
+              Accel[i_3] = accelSqrt;
+              Altitude[i_3] = altitude;
+              i_3 = i_3 + 1;
+              if (i_3 == 6)
+              { // 5個得たらその時点での平均値を出し，次のフェーズへ
+                yeah = 2;
+                i_3 = 0; // iの値をリセット
+                for (j_3 = 1; j_3 < 6; j_3++)
+                { // j_3=0の値は非常に誤差が大きいので1から
+                  Acsum = Acsum + Accel[j_3];
+                  Alsum = Alsum + Altitude[j_3];
+                }
+                Acave = Acsum / 5;
+                Alave = Alave / 5;
+                time3_2 = currentMillis;
+              }
+            }
+            else
+            {
+              Preac = Acave;
+              Preal = Alave;
+              Accel[i_3] = accelSqrt;
+              Altitude[i_3] = altitude;
+              for (j_3 = 0; j_3 < 5; j_3++)
+              {
+                Acsum = Acsum + Accel[j_3];
+                Alsum = Alsum + Altitude[j_3];
+              }
+              Acave = Acsum / 5;
+              Alave = Alsum / 5;
+              RealDiffer1 = Preac - Acave;
+              RealDiffer2 = Preal - Alave;
+              if (i_3 == 5)
+              {
+                i_3 = 0;
+                Acsum = 0;
+                Alsum = 0;
+              }
+              else
+              {
+                i_3 = i_3 + 1;
+                Acsum = 0;
+                Alsum = 0;
+              }
+              if (currentMillis - time3_2 > 1000)
+              {
+                if (RealDiffer1 < differ1)
+                { // 移動平均が基準以内の変化量だった時
+                  phase = 3;
+                }
+                else if (RealDiffer2 < differ2)
+                {
+                  phase = 3;
+                }
+                else
+                {
+                  time3_2 = currentMillis;
+                }
+              }
+            }
+            
+            break;
+
+          //########## 分離フェーズ ##########
+          case 3:
+            if(phase_state != 3)
+            {
+              Serial2.println("Phase3: transition completed");
+              // LogDataの保存
+              CanSatLogData.println(gps_time);
+              CanSatLogData.println("Phase3: transition completed");
+              CanSatLogData.flush();
+
+              phase_state = 3;
+            }
+
+            Serial2.println("WARNING: 9v voltage on");
+            digitalWrite(cutparac, HIGH); // オン
+            delay(outputcutsecond*1000);// 電流を流す
+            Serial2.println("9v voltage off");
+            digitalWrite(cutparac, LOW); // オフ
+
+            break;
+
+
+            break;*/    
+        }
+
+        /*// センサー値を送信
+        Serial2.print(gps_time);
+        Serial2.print(",");
+        Serial2.print(gps_latitude, 9);
+        Serial2.print(",");
+        Serial2.print(gps_longitude, 9);
+        Serial2.print(",");
+        Serial2.print(gps_velocity);
+        Serial2.print(",");
+        Serial2.print(Temperature);
+        Serial2.print(",");
+        Serial2.print(Pressure);
+        Serial2.print(",");
+        Serial2.print(Humid);
+        Serial2.print(",");
+        Serial2.print(accelX);
+        Serial2.print(",");
+        Serial2.print(accelY);
+        Serial2.print(",");
+        Serial2.print(accelZ);
+        Serial2.print(",");
+        Serial2.print(Angle_gy271);
+        Serial2.print(",");
+        Serial2.println(ultra_distance);*/
+    
+        // SDカードへデータを保存
+        SensorData.print(gps_time);
+        SensorData.print(",");
+        SensorData.print(gps_latitude, 9);
+        SensorData.print(",");
+        SensorData.print(gps_longitude, 9);
+        SensorData.print(",");
+        SensorData.print(gps_velocity);
+        SensorData.print(",");
+        SensorData.print(Temperature);
+        SensorData.print(",");
+        SensorData.print(Pressure);
+        SensorData.print(",");
+        SensorData.print(Humid);
+        SensorData.print(",");
+        SensorData.print(accelX);
+        SensorData.print(",");
+        SensorData.print(accelY);
+        SensorData.print(",");
+        SensorData.print(accelZ);
+        SensorData.print(",");
+        SensorData.print(Angle_gy271);
+        SensorData.print(",");
+        SensorData.println(ultra_distance);
+    }
+  } // "if(Serial1.available()>0)"の閉じ
+} // loop関数の閉じ
