@@ -45,10 +45,10 @@ int outputcutsecond = 3;
 //motor
 //forward
 void forward(){
-  ledWrite(0,0);
-  ledWrite(1,5000);
-  ledWrite(2,0);
-  ledWrite(3,5000);
+  ledcWrite(0,0);
+  ledcWrite(1,5000);
+  ledcWrite(2,0);
+  ledcWrite(3,5000);
 }
 //accel
 void accel()
@@ -76,24 +76,24 @@ void brake()
 }
 //stop
 void stoppage(){
-  ledWrite(0,0);
-  ledWrite(1,0);
-  ledWrite(2,0);
-  ledWrite(3,0);
+  ledcWrite(0,0);
+  ledcWrite(1,0);
+  ledcWrite(2,0);
+  ledcWrite(3,0);
 }
 //rotate
 void rotating(){
-  ledWrite(0,0);
-  ledWrite(1,5000);
-  ledWrite(2,5000);
-  ledWrite(3,0);
+  ledcWrite(0,0);
+  ledcWrite(1,5000);
+  ledcWrite(2,5000);
+  ledcWrite(3,0);
 }
 //reverse_rotate
 void reverse_rotating(){
-  ledWrite(0,5000);
-  ledWrite(1,0);
-  ledWrite(2,0);
-  ledWrite(3,5000);
+  ledcWrite(0,5000);
+  ledcWrite(1,0);
+  ledcWrite(2,0);
+  ledcWrite(3,5000);
 }
 
 //Raspberry Pi 通信
@@ -301,13 +301,7 @@ void loop(){
 
   switch(phase){
     case 0:
-      if(phase_state != 1){
-        Serial.println("Phase1");
-        Serial2.write(gps_time);
-
-        phase_state = 1;
-      }
-    if(mode_to_bmp == 0){
+      
       
     
       
