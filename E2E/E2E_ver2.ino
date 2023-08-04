@@ -1,165 +1,193 @@
-//calculation
-#include <math.h>
-#define red2deg(a) ((a) / M_PI * 180.0) /*red -> deg*/
-#define deg2red(a) ((a) / 180.0 * M_PI) /*deg -> red*/
-
-//BME280
-#include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_BME280>
-#define SEALEVELPRESSURE_HPA (1013.25)
-Adafruit_BME280 bme;
-
-float temp;
-float pressure;
-float humid;
-float altitude;
-
-//BNO055
-#include <Wire.h>
-#include <Adafruit_BNO055.h>
-#include <Adafruit_Sensor.h>
-Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
-int CalibrationCounter = 1;  //キャリブレーションで取得したデータの個数
-double declinationAngle; //補正用
-double heading;  //弧度法
-double headingDegrees;  //度数法
-double Sum_headingDegrees;  //連続15個のheadingDegreesの和
-double Angle_gy271;  //連続15個の平均値（度数法）
-
-
-//GPS
 #include <TinyGPS++.h>
-#inlcude <HardwareSerial.h>
-TinyGPSlus gps;
-HardwareSerial SerialGPS(1);
-double gps_latitude, gps_longitude, gps_velocity;
-int gps_time;
-double GOAL_lat = ;
-double GOAL_lng = ;
+#include <DFRobot_QMC5883.h>
+#include <math.h>
 
-//nicromewire
-int cutparac = 23;
-int outputcutsecond = 3;
+#define rad2deg(a) ((a) / M_PI * 180.0) /* rad を deg に換算するマクロ関数 */
+#define deg2rad(a) ((a) / 180.0 * M_PI) /* deg を rad に換算するマクロ関数 */
 
-//motor
-//forward
-void forward(){
-  ledcWrite(0,0);
-  ledcWrite(1,5000);
-  ledcWrite(2,0);
-  ledcWrite(3,5000);
-}
-//accel
-void accel()
-{
-  for (int i = 0; i < 2500; i = i + 10)
-  {
-    ledcWrite(0, 0);
-    ledcWrite(1, i);
-    ledcWrite(2, 0);
-    ledcWrite(3, i);
-    delay(80); // accelではdelay使う
-  }
-}
-//brake
-void brake()
-{
-  for (int i = 2500; i > 0; i = i - 10)
-  {
-    ledcWrite(0, 0);
-    ledcWrite(1, i);
-    ledcWrite(2, 0);
-    ledcWrite(3, i);
-    delay(80); // stoppingではdelay使う
-  }
-}
-//stop
-void stoppage(){
-  ledcWrite(0,0);
-  ledcWrite(1,0);
-  ledcWrite(2,0);
-  ledcWrite(3,0);
-}
-//rotate
-void rotating(){
-  ledcWrite(0,0);
-  ledcWrite(1,5000);
-  ledcWrite(2,5000);
-  ledcWrite(3,0);
-}
-//reverse_rotate
-void reverse_rotating(){
-  ledcWrite(0,5000);
-  ledcWrite(1,0);
-  ledcWrite(2,0);
-  ledcWrite(3,5000);
-}
+double aX, aY, aZ, aSqrt, gX, gY, gZ, mDirection, mX, mY, mZ;
 
-//Raspberry Pi 通信
-#include <HardwareSerial.h>
-int RX_PIN = 22;
-int TX_PIN = 23;
+DFRobot_QMC5883 compass;
+TinyGPSPlus gps;
 
-int phase = 0;
+int phase = 4;
+char key = '0';
+const int SAMPLING_RATE = 200;
 int phase_state = 0;
 
-// for phase1
-int mode_comparison = 0;
-int mode_to_bme = 0;
-int count1 = 0;
-int count3 = 0;
-double altitude_sum_bme = 0;
-double altitude,previous_altitude,current_altitude;
-unsigned long previous_millis,current_millis;
-
-// for phase2
+// for phase3
 int type = 1;
 int yeah = 1;
 int type_state = 0;
-double time3_2; // 時間に関するもの
-double Accel[6];                  // 計測した値をおいておく変数
-double Altitude[6];               // 高度
+int cutparac = 23;                //切り離し用トランジスタのピン番号の宣言
+int outputcutsecond = 5;          //切り離し時の9V電圧を流す時間，単位はsecond
+double time3_1, time3_2, St_Time; //時間に関するもの
+double Accel[6];                  //計測した値をおいておく関数
+double Altitude[6];               //(高度)
 double Preac, differ1, Acsum, Acave, RealDiffer1;
 double Preal, differ2, Alsum, Alave, RealDiffer2;
 int i_3 = 0;
 int j_3 = 0;
 double RealDiffer;
 
-// for phase3
-int cutparac = 23;          // 切り離し用トランジスタのピン番号の宣言
-int outputcutsecond = 3;    // 切り離し時の9V電圧を流す時間，単位はsecond
+// for MPU6050
+#include <MPU9250_asukiaaa.h>
+#ifdef _ESP32_HAL_I2C_H_
+#define SDA_MPU 21 // I2C通信
+#define SCL_MPU 22
+#endif
+MPU9250_asukiaaa mySensor;
+
+// for BMP180
+#include <Wire.h> //I2C通信
+#include <Adafruit_BMP085.h>
+Adafruit_BMP085 bmp;
+#define SDA_BMP 21
+#define SCL_BMP 22
+
+// for SD Card
+#include <SPI.h> //SDカードはSPI通信
+#include <SD.h>
+File CanSatLogData;
+File SensorData;
+const int sck = 13, miso = 15, mosi = 14, ss = 27;
+
+//センサー値の格納
+double Temperature, Pressure, accelX, accelY, accelZ, magX, magY, magZ, gyroX, gyroY, gyroZ, accelSqrt = 0, gps_latitude, gps_longitude, gps_velocity, altitude = 0;
+int gps_time, R, G, B;
+long ultra_distance;
+
+// for phase1,2
+int mode_average = 0;
+int mode_comparison = 0;
+int mode_to_bmp = 0;
+int count1 = 0;
+int count2 = 0;
+int count3 = 0;
+double altitude_average = 10000;
+double altitude_sum = 0;
+double alt[5];
+unsigned long current_millis;
+unsigned long previous_millis;
+double altitude_sum_mpu = 0;
+double altitude_sum_bmp = 0;
+double altitude_sum_gps = 0;
+double previous_altitude;
+double current_altitude;
 
 // for phase4
-double desiredDistance = 10.0; //遠距離フェーズから中距離フェーズに移行する距離
+int CalibrationCounter = 1;
+int calibration = 1;
+int sum_count = 0;
 double CurrentDistance;
-double Angle_Goal,rrAngle,llAngle;
+double heading;
+double declinationAngle;
+double headingDegrees;
+double Angle_gy270;
+double Angle_Goal;
+double Angle_gps;
+double Angle_heading;
+double rrAngle, llAngle;
+double sum_latitude = 0;
+double sum_longitude = 0;
+
+
+// you need to set up variables at first
+double GOAL_lat = 35.860545000;
+double GOAL_lng = 139.606940001;
+
+// variables___GPS
+//緯度
+double GPSlat_array[5];
+double GPSlat_sum = 0;
+double GPSlat_data;
+//経度
+double GPSlng_array[5];
+double GPSlng_sum = 0;
+double GPSlng_data;
+double delta_lng;
+//距離
+double distance; //直進前後でゴールに近づいているかどうかを表す
+double Pre_distance;
+// variables___GY-271
+double heading_data;
+double heading_array[5];
+double heading_sum = 0;
+double omega;
+double azimuth;
+
+// GPSのデータがちゃんと得られてるかどうか一回だけ表示するための変数
+int counter = 0;
+// phase4の変数を最初の一回だけ表示するための変数
+int counter1 = 0;
+int counter2 = 0;
+int counter3 = 0;
+
+int Colorsensor_Phase = 1;
+int RED;
+int BLUE;
+int GREEN;
+int Length;
+int Distance_to_Goal = 0; //ゴールまでの距離何メートル以内であってほしいか
+int Color_count = 1;
 
 // for phase5
-double sum_latitude,sum_longitude;
-unsigned long nowmillis;
-int sum_count = 0;
-int EPSILON = 30;
-
-// for phase6
-double current_distance,previous_distance,distance1,distance2;
-unsigned long current_Millis,time1,time2;
-int phase_5 = 1;
+// those are variables which is used in 超音波
 int count = 0;
-int accel_count = 1;
+int phase_5 = 5;
+int previous_distance = 0;
+int current_distance;
+int EPSILON = 5;
+int distance1, distance2;
+double current_Millis;
+double previous_Millis;
 
+#include "SR04.h"
+#define TRIG_PIN 0
+#define ECHO_PIN 4
+SR04 sr04 = SR04(ECHO_PIN, TRIG_PIN);
+int forward_phase = 1;
+unsigned long previousMillis = 0;
+unsigned long nowmillis = 0;
+int Priviousdistance;
+int i = 255;
+unsigned long time1;
+unsigned long time2;
+
+double Sum_headingDegrees;
+
+double w = 1; //地磁気センサーの信頼係数
+
+double desiredDistance = 10.0; //遠距離フェーズから中距離フェーズに移行する距離
+
+double pre_gps_latitude, pre_gps_longitude;
+int LongDis_phase = 0;
+
+volatile int timeCounter1;
+hw_timer_t *timer1 = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+// Interrupt timer function
+void IRAM_ATTR onTimer1()
+{
+  portENTER_CRITICAL_ISR(&timerMux);
+  timeCounter1++;
+  portEXIT_CRITICAL_ISR(&timerMux);
+}
 
 //緯度経度から距離を返す関数
-double CalculateDis(double GOAL_lng, double GOAL_lat, double gps_longitude, double gps_latitude){
-  GOAL_lng = deg2red(GOAL_lng);
-  GOAL_lat = deg2red(GOAL_lat);
+double CalculateDis(double GOAL_lng, double GOAL_lat, double gps_longitude, double gps_latitude)
+{
+
+  GOAL_lng = deg2rad(GOAL_lng);
+  GOAL_lat = deg2rad(GOAL_lat);
 
   gps_longitude = deg2rad(gps_longitude);
   gps_latitude = deg2rad(gps_latitude);
 
-  double EarthRadius = 6378.137;
+  double EarthRadius = 6378.137; //
 
-  // 目標地点までの距離を導出
+  //目標地点までの距離を導出
   delta_lng = GOAL_lng - gps_longitude;
 
   distance = EarthRadius * acos(sin(gps_latitude) * sin(GOAL_lat) + cos(gps_latitude) * cos(GOAL_lat) * cos(delta_lng)) * 1000;
@@ -167,7 +195,7 @@ double CalculateDis(double GOAL_lng, double GOAL_lat, double gps_longitude, doub
   return distance;
 }
 
-// 角度計算用の関数
+//角度計算用の関数
 double CalculateAngle(double GOAL_lng, double GOAL_lat, double gps_longitude, double gps_latitude)
 {
 
@@ -177,11 +205,11 @@ double CalculateAngle(double GOAL_lng, double GOAL_lat, double gps_longitude, do
   gps_longitude = deg2rad(gps_longitude);
   gps_latitude = deg2rad(gps_latitude);
 
-  // 目標地点までの角度を導出
+  //目標地点までの角度を導出
   delta_lng = GOAL_lng - gps_longitude;
   azimuth = rad2deg(atan2(sin(delta_lng), cos(gps_latitude) * tan(GOAL_lat) - sin(gps_latitude) * cos(delta_lng)));
 
-  if (azimuth < 0)// azimuthを0°～360°に収める
+  if (azimuth < 0)
   {
     azimuth += 360;
   }
@@ -192,59 +220,287 @@ double CalculateAngle(double GOAL_lng, double GOAL_lat, double gps_longitude, do
   return azimuth;
 }
 
-
-
-void setup(){
-  Serial.begin(115200);
-
-//Raspberry Pi
-  Serial2.begin(19200,SERIAL_8N1, RX_PIN, TX_PIN);
-
-//BME280
-  bool status = bme.begin(0x76);
-  if(!status) {
-    Serial.println("BME280 sensor can't be used);
-    while(1);
-  }
-
-
-//GPS
-    Serial1.begin(9600,SERIAL_8N1,5,18);
-
-//motor
-  ledcSetup(0,490,8);
-  ledxSetup(1,490,8);
-  ledcSetup(2,490,8);
-  ledcSetup(3,490,8);
-
-  ledcAttachPin(32,0);
-  ledcAttachPin(33,1);
-  ledcAttachPin(26,2);
-  ledcAttachPin(25,3);
-
-
-//nicromewire
-  pinMode(cutparac, OUTPUT);      //切り離し用トランジスタの出力宣言
-  digitalWrite(cutparac, LOW);    //切り離し用トランジスタの出力オフ
-
-//BNO055
-  Wire.begin(21,22);
-  if (!bno.begin()) {
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while (1);
-  }
-
-    /*
-//BNO055
-  Serial.println("Calibration status values: 0=uncalibrated, 3=fully calibrated");
-  bno055ticker.attach_ms(BNO055interval, get_bno055_data);
-  */
-//BNO055
-    
+//前進
+void forward()
+{
+  ledcWrite(0, 0); // channel, duty
+  ledcWrite(1, 255);
+  ledcWrite(2, 0);
+  ledcWrite(3, 235);
 }
 
+/*//ターボ
+void turbo()
+{
+  ledcWrite(0, 0); // channel, duty
+  ledcWrite(1, 255);
+  ledcWrite(2, 0);
+  ledcWrite(3, 235);
+}*/
 
-void loop(){
+//後転
+void back()
+{
+  ledcWrite(0, 0);
+  ledcWrite(1, 127);
+  ledcWrite(2, 0);
+  ledcWrite(3, 127);
+}
+
+//停止
+void stoppage()
+{
+  ledcWrite(0, 0);
+  ledcWrite(1, 0);
+  ledcWrite(2, 0);
+  ledcWrite(3, 0);
+}
+
+//右旋回
+void leftturn()
+{
+  ledcWrite(0, 0);
+  ledcWrite(1, 0);
+  ledcWrite(2, 255);
+  ledcWrite(3, 0);
+}
+
+//左旋回
+void rightturn()
+{
+  ledcWrite(0, 255);
+  ledcWrite(1, 0);
+  ledcWrite(2, 0);
+  ledcWrite(3, 0);
+}
+
+//回転
+void rotating()
+{
+  ledcWrite(0, 0);
+  ledcWrite(1, 140);
+  ledcWrite(2, 140);
+  ledcWrite(3, 0);
+}
+
+//ゆっくり回転
+void slow_rotating()
+{
+  ledcWrite(0, 0);
+  ledcWrite(1, 90);
+  ledcWrite(2, 90);
+  ledcWrite(3, 0);
+}
+
+//反回転
+void reverse_rotating()
+{
+  ledcWrite(0, 140);
+  ledcWrite(1, 0);
+  ledcWrite(2, 0);
+  ledcWrite(3, 140);
+}
+
+//ゆっくり加速
+void accel()
+{
+  for (int i = 0; i < 255; i = i + 5)
+  {
+    ledcWrite(0, 0);
+    ledcWrite(1, i);
+    ledcWrite(2, 0);
+    ledcWrite(3, i);
+    delay(80); // accelではdelay使う
+  }
+}
+
+//ゆっくり停止
+void stopping()
+{
+  for (int i = 255; i > 0; i = i - 5)
+  {
+    ledcWrite(0, 0);
+    ledcWrite(1, i);
+    ledcWrite(2, 0);
+    ledcWrite(3, i);
+    delay(80); // stoppingではdelay使う
+  }
+}
+
+void setup()
+{
+  Serial1.begin(115200, SERIAL_8N1, 5, 18);
+
+  // mpuが正常動作するためのプログラム
+  while (!Serial)
+    ;
+  Serial.println("started");
+
+#ifdef _ESP32_HAL_I2C_H_ // For ESP32
+  Wire.begin(SDA_MPU, SCL_MPU);
+  mySensor.setWire(&Wire);
+#endif
+
+  mySensor.beginAccel();
+  mySensor.beginGyro();
+  mySensor.beginMag();
+
+  uint8_t sensorId;
+  if (mySensor.readId(&sensorId) == 0)
+  {
+    Serial.println("sensorId: " + String(sensorId));
+  }
+  else
+  {
+    Serial.println("Cannot read sensorId");
+  }
+
+  if (mySensor.accelUpdate() == 0)
+  {
+    aX = mySensor.accelX() + 0.00;
+    aY = mySensor.accelY() + 0.00;
+    aZ = mySensor.accelZ() + 0.00;
+    aSqrt = mySensor.accelSqrt();
+    Serial.println("accelX: " + String(aX));
+    Serial.println("accelY: " + String(aY));
+    Serial.println("accelZ: " + String(aZ));
+    Serial.println("accelSqrt: " + String(aSqrt));
+  }
+  else
+  {
+    Serial.println("Cannod read accel values");
+  }
+
+  if (mySensor.gyroUpdate() == 0)
+  {
+    gX = mySensor.gyroX();
+    gY = mySensor.gyroY();
+    gZ = mySensor.gyroZ();
+    Serial.println("gyroX: " + String(gX));
+    Serial.println("gyroY: " + String(gY));
+    Serial.println("gyroZ: " + String(gZ));
+  }
+  else
+  {
+    Serial.println("Cannot read gyro values");
+  }
+
+  if (mySensor.magUpdate() == 0)
+  {
+    mX = mySensor.magX();
+    mY = mySensor.magY();
+    mZ = mySensor.magZ();
+    mDirection = mySensor.magHorizDirection();
+    Serial.println("magX: " + String(mX));
+    Serial.println("maxY: " + String(mY));
+    Serial.println("magZ: " + String(mZ));
+    Serial.println("horizontal direction: " + String(mDirection));
+  }
+  else
+  {
+    Serial.println("Cannot read mag values");
+  }
+
+  Serial.println("at " + String(millis()) + "ms");
+  Serial.println(""); // Add an empty line
+  delay(500);
+  // MPUが正常動作するためのプログラム終了
+
+  // SD Card initialization
+  SPI.begin(sck, miso, mosi, ss);
+  SD.begin(ss, SPI);
+  CanSatLogData = SD.open("/CanSatLogData.log", FILE_APPEND);
+  SensorData = SD.open("/SensorData.log", FILE_APPEND);
+
+  //割り込み関数
+  timer1 = timerBegin(0, 80, true);
+  timerAttachInterrupt(timer1, &onTimer1, true);
+  timerAlarmWrite(timer1, 1.0E6 / SAMPLING_RATE, true);
+  timerAlarmEnable(timer1);
+  //無線通信
+  Serial.begin(115200);
+  // Serial.begin(115200, SERIAL_8N1, 16, 17); //関数内の引数はデータ通信レート，unknown，RXピン，TXピン
+  Serial.write("TESTING: Serial communication\n");
+  Serial.write("TESTING: Serial communication\n");
+  CanSatLogData.println("START_RECORD");
+  CanSatLogData.flush();
+  SensorData.println("gps_time,gps_latitude,gps_longitude,gps_velocity,Temperature,Pressure,accelX,accelY,accelZ,heading,headingDegrees,R,G,B,ultra_distance");
+  SensorData.flush();
+
+  // for BMP
+  bmp.begin();
+
+  // for motor
+  ledcSetup(0, 490, 8);
+  ledcSetup(1, 490, 8);
+  ledcSetup(2, 490, 8);
+  ledcSetup(3, 490, 8);
+
+  ledcAttachPin(32, 0);
+  ledcAttachPin(33, 1);
+  ledcAttachPin(26, 2);
+  ledcAttachPin(25, 3);
+
+  // for GY-271
+  while (!compass.begin())
+  {
+    Serial.println("Could not find a valid QMC5883 sensor, check wiring!");
+    delay(500);
+  }
+
+  if (compass.isHMC())
+  {
+    Serial.println("Initialize HMC5883");
+    compass.setRange(HMC5883L_RANGE_1_3GA);
+    compass.setMeasurementMode(HMC5883L_CONTINOUS);
+    compass.setDataRate(HMC5883L_DATARATE_15HZ);
+    compass.setSamples(HMC5883L_SAMPLES_8);
+  }
+  else if (compass.isQMC())
+  {
+    Serial.println("Initialize QMC5883");
+    compass.setRange(QMC5883_RANGE_2GA);
+    compass.setMeasurementMode(QMC5883_CONTINOUS);
+    compass.setDataRate(QMC5883_DATARATE_50HZ);
+    compass.setSamples(QMC5883_SAMPLES_8);
+  }
+  leftturn();
+  delay(100);
+  Serial.println("calibration rotating!");
+  while (CalibrationCounter < 551)
+  {
+    Vector norm = compass.readNormalize();
+    rotating(); // testcodeでは手動で回す．
+    if (CalibrationCounter == 550)
+    {
+      stoppage();
+      Serial.println("calibration stopping!");
+      delay(2000);
+      calibration = 2;
+      CalibrationCounter = CalibrationCounter + 1;
+    }
+    else
+    {
+      CalibrationCounter = CalibrationCounter + 1;
+      Serial.print("CalibrationCounter = ");
+      Serial.println(CalibrationCounter);
+    }
+  }
+  // for colorsensor
+  Wire.begin();
+  Wire.beginTransmission(0x39);
+  Wire.write(0x44);
+  Wire.write(0x01);
+  Wire.endTransmission();
+  Wire.beginTransmission(0x39);
+  Wire.write(0x42);
+  Wire.write(0x12);
+  Wire.endTransmission();
+
+} // setup関数閉じ
+
+void loop()
+{
   if (Serial1.available() > 0)
   { //これないとGPS使えない
     char c = Serial1.read();
@@ -265,8 +521,8 @@ void loop(){
 
         //センサー値取得
         // BMP180
-        Temperature = bme.readTemperature();
-        Pressure = bme.readPressure();
+        Temperature = bmp.readTemperature();
+        Pressure = bmp.readPressure();
         if (mySensor.accelUpdate() == 0)
         {
           accelX = mySensor.accelX() + 0;
@@ -275,7 +531,7 @@ void loop(){
           accelSqrt = mySensor.accelSqrt();
         }
 
-        altitude = bme.readAltitude();
+        altitude = bmp.readAltitude();
 
 
         /*gps_latitude = gps.location.lat();
@@ -298,7 +554,41 @@ void loop(){
 
         gps_time = gps.time.value();
         gps_velocity = gps.speed.mps();
-
+        //超音波
+        ultra_distance = sr04.Distance();
+        //カラーセンサー
+        int i_c;
+        Wire.beginTransmission(0x39);
+        Wire.write(0x50);
+        Wire.endTransmission();
+        Wire.requestFrom(0x39, 8);
+        for (i_c = 1; i_c < 5; i_c++)
+        {
+          int c1 = Wire.read();
+          int c2 = Wire.read();
+          c1 = c1 + c2 * 256;
+          switch (i_c)
+          {
+          case 1:
+            Serial.print("R =");
+            R = c1;
+            break;
+          case 2:
+            Serial.print(" , G =");
+            G = c1;
+            break;
+          case 3:
+            Serial.print(" , B =");
+            B = c1;
+            break;
+          case 4:
+            Serial.print(" , C =");
+            break;
+          }
+          Serial.print(c1);
+          if (i_c == 4)
+            Serial.println();
+        }
 
         Serial.print(gps_time);
         Serial.print(",");
@@ -322,86 +612,14 @@ void loop(){
         Serial.print(",");
         Serial.print(headingDegrees);
         Serial.print(",");
-
-        //BNO055
-  // Possible vector values can be:
-  // - VECTOR_ACCELEROMETER - m/s^2
-  // - VECTOR_MAGNETOMETER  - uT
-  // - VECTOR_GYROSCOPE     - rad/s
-  // - VECTOR_EULER         - degrees
-  // - VECTOR_LINEARACCEL   - m/s^2
-  // - VECTOR_GRAVITY       - m/s^2
-  
-  /*
-  // キャリブレーションのステータスの取得と表示
-  uint8_t system, gyro, accel, mag = 0;
-  bno.getCalibration(&system, &gyro, &accel, &mag);
-  Serial.print("CALIB Sys:");
-  Serial.print(system, DEC);
-  Serial.print(", Gy");
-  Serial.print(gyro, DEC);
-  Serial.print(", Ac");
-  Serial.print(accel, DEC);
-  Serial.print(", Mg");
-  Serial.print(mag, DEC);
-  */
-  
-  // ジャイロセンサ値の取得と表示
-  imu::Vector<3> gyroscope = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-  Serial.print(" 　Gy_xyz:");
-  Serial.print(gyroscope.x());
-  Serial.print(", ");
-  Serial.print(gyroscope.y());
-  Serial.print(", ");
-  Serial.print(gyroscope.z());
-  
-  
-  // 加速度センサ値の取得と表示
-  imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-  Serial.print(" 　Ac_xyz:");
-  Serial.print(accelermetor.x());
-  Serial.print(", ");
-  Serial.print(accelermetor.y());
-  Serial.print(", ");
-  Serial.print(accelermetor.z());
-
- 
-  // 磁力センサ値の取得と表示
-  imu::Vector<3> magnetmetor = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);
-  Serial.print(" 　Mg_xyz:");
-  Serial.print(magnetmetor .x());
-  Serial.print(", ");
-  Serial.print(magnetmetor .y());
-  Serial.print(", ");
-  Serial.print(magnetmetor .z());
-  
-  
-  /*
-  // センサフュージョンによる方向推定値の取得と表示
-  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-  Serial.print(" 　DIR_xyz:");
-  Serial.print(euler.x());
-  Serial.print(", ");
-  Serial.print(euler.y());
-  Serial.print(", ");
-  Serial.print(euler.z());
-*/
-  /*
-    // センサフュージョンの方向推定値のクオータニオン
-    imu::Quaternion quat = bno.getQuat();
-    Serial.print("qW: ");
-    Serial.print(quat.w(), 4);
-    Serial.print(" qX: ");
-    Serial.print(quat.x(), 4);
-    Serial.print(" qY: ");
-    Serial.print(quat.y(), 4);
-    Serial.print(" qZ: ");
-    Serial.print(quat.z(), 4);
-    Serial.print("\t\t");
-  */
-
-  Serial.println();
-  delay(1000);
+        Serial.print(R);
+        Serial.print(",");
+        Serial.print(G);
+        Serial.print(",");
+        Serial.print(B);
+        Serial.print(",");
+        Serial.println(ultra_distance);
+        Serial.flush();
 
         //各フェーズごとの記述
         switch (phase)
@@ -414,25 +632,25 @@ void loop(){
             //待機フェーズに入ったとき１回だけ実行したいプログラムを書く
             Serial.write("Phase1: transition completed\n"); // 地上局へのデータ送信
             // LogDataの保存
-            Serial2.println(gps_time);
-            SErial2.println("Phase1: transition completed");
-            SErial2.flush();
+            CanSatLogData.println(gps_time);
+            CanSatLogData.println("Phase1: transition completed");
+            CanSatLogData.flush();
 
             phase_state = 1;
           }
-          if (mode_to_bme == 0)
+          if (mode_to_bmp == 0)
           {
             if (accelZ < -2)
             { //落下開始をまずMPUで判定
-              altitude_sum_BNO += altitude;
+              altitude_sum_mpu += altitude;
               count1++;
               if (count1 == 1)
               {
                 count1 = 0;
-                Serial2.println(gps_time);
-                Serial2.println("FALL STARTED(by MPU)\n");
-                Serial2.flush();
-                mode_to_bme = 1;
+                CanSatLogData.println(gps_time);
+                CanSatLogData.println("FALL STARTED(by MPU)\n");
+                CanSatLogData.flush();
+                mode_to_bmp = 1;
               }
             }
           }
@@ -442,12 +660,12 @@ void loop(){
             { //落下開始をBMPで判定
             case 0:
               previous_millis = millis();
-              altitude_sum_bme += altitude;
+              altitude_sum_bmp += altitude;
               count3++;
               if (count3 == 5)
               {
-                previous_altitude = altitude_sum_bme / 5;
-                altitude_sum_bme = 0;
+                previous_altitude = altitude_sum_bmp / 5;
+                altitude_sum_bmp = 0;
                 count3 = 0;
                 mode_comparison = 1;
               }
@@ -456,23 +674,23 @@ void loop(){
               current_millis = millis();
               if (current_millis - previous_millis >= 500)
               {
-                altitude_sum_bme += altitude;
+                altitude_sum_bmp += altitude;
                 count3++;
                 if (count3 == 5)
                 {
-                  current_altitude = altitude_sum_bme / 5;
-                  Serial2.println(currentMillis);
-                  Serial2.println("current_altitude - previous_altitude = \n");
-                  Serial2.println(current_altitude - previous_altitude);
+                  current_altitude = altitude_sum_bmp / 5;
+                  CanSatLogData.println(currentMillis);
+                  CanSatLogData.println("current_altitude - previous_altitude = \n");
+                  CanSatLogData.println(current_altitude - previous_altitude);
                   if (current_altitude - previous_altitude <= -1.0)
                   {
-                    Serial2.println("FALL STARTED(by BMP)\n");
-                    Serial2.flush();
+                    CanSatLogData.println("FALL STARTED(by BMP)\n");
+                    CanSatLogData.flush();
                     phase = 2;
                   }
                   else
                   {
-                    altitude_sum_bme = 0;
+                    altitude_sum_bmp = 0;
                     count3 = 0;
                     mode_comparison = 0;
                   }
@@ -490,9 +708,9 @@ void loop(){
             Serial.write("Phase2: transition completed\n"); //地上局へのデータ送信
 
             // LogDataの保存
-            Serial2.println(gps_time);
-            Serial2.println("Phase2: transition completed");
-            Serial2.flush();
+            CanSatLogData.println(gps_time);
+            CanSatLogData.println("Phase2: transition completed");
+            CanSatLogData.flush();
 
             i_3 = 0;
             j_3 = 0;
@@ -581,9 +799,9 @@ void loop(){
             //分離フェーズに入ったとき１回だけ実行したいプログラムを書く
             Serial.write("Phase3: transition completed\n");
             // LogDataの保存
-            Serial2.println(gps_time);
-            Serial2.println("Phase3: transition completed");
-            Serial2.flush();
+            CanSatLogData.println(gps_time);
+            CanSatLogData.println("Phase3: transition completed");
+            CanSatLogData.flush();
             phase_state = 3;
             time3_1 = currentMillis;                    // phase3　開始時間の保存
             St_Time = time3_1 + outputcutsecond * 1000; //基準時間
@@ -591,18 +809,18 @@ void loop(){
             digitalWrite(cutparac, HIGH); //オン
             Serial.write("WARNING: 9v voltage is output.\n");
             // LogDataの保存
-            Serial2.println(currentMillis);
-            Serial2.println("9v voltage is output");
-            Serial2.flush();
+            CanSatLogData.println(currentMillis);
+            CanSatLogData.println("9v voltage is output");
+            CanSatLogData.flush();
           }
 
           if (currentMillis > St_Time)
           {                              //電流を流した時間が基準時間を超えたら
             digitalWrite(cutparac, LOW); //オフ
             Serial.write("WARNING: 9v voltage is stop.\n");
-            Serial2.println(currentMillis);
-            Serial2.println("WARNING: 9v voltage is stop.\n");
-            Serial2.flush();
+            CanSatLogData.println(currentMillis);
+            CanSatLogData.println("WARNING: 9v voltage is stop.\n");
+            CanSatLogData.flush();
             phase = 4;
           }
 
@@ -620,13 +838,13 @@ void loop(){
             Serial.println(gps_longitude, 9);
 
             // LogDataの保存
-            Serial2.println(gps_time);
-            Serial2.println("Phase4: transition completed");
-            Serial2.print("LAT(PHASE4_START):");
-            Serial2.println(gps_latitude, 9);
-            Serial2.print("LONG(PHASE4_START):");
-            Serial2.println(gps_longitude, 9);
-            Serial2.flush();
+            CanSatLogData.println(gps_time);
+            CanSatLogData.println("Phase4: transition completed");
+            CanSatLogData.print("LAT(PHASE4_START):");
+            CanSatLogData.println(gps_latitude, 9);
+            CanSatLogData.print("LONG(PHASE4_START):");
+            CanSatLogData.println(gps_longitude, 9);
+            CanSatLogData.flush();
 
             phase_state = 4;
           }
@@ -729,13 +947,13 @@ void loop(){
             Serial.println(gps_longitude, 9);
 
             // LogDataの保存
-            Serial2.println(gps_time);
-            Serial2.println("Phase0: transition completed");
-            Serial2.print("LAT(PHASE0_START):");
-            Serial2.println(gps_latitude, 9);
-            Serial2.print("LONG(PHASE0_START):");
-            Serial2.println(gps_longitude, 9);
-            Serial2.flush();
+            CanSatLogData.println(gps_time);
+            CanSatLogData.println("Phase0: transition completed");
+            CanSatLogData.print("LAT(PHASE0_START):");
+            CanSatLogData.println(gps_latitude, 9);
+            CanSatLogData.print("LONG(PHASE0_START):");
+            CanSatLogData.println(gps_longitude, 9);
+            CanSatLogData.flush();
 
             phase_state = 0;
           }
@@ -840,20 +1058,18 @@ void loop(){
             Serial.println(gps_longitude, 9);
 
             // LogDataの保存
-            Serial2.println(gps_time);
-            Serial2.println("Phase5: transition completed");
-            Serial2.print("LAT(PHASE5_START):");
-            Serial2.println(gps_latitude, 9);
-            Serial2.print("LONG(PHASE5_START):");
-            Serial2.println(gps_longitude, 9);
-            Serial2.flush();
+            CanSatLogData.println(gps_time);
+            CanSatLogData.println("Phase5: transition completed");
+            CanSatLogData.print("LAT(PHASE5_START):");
+            CanSatLogData.println(gps_latitude, 9);
+            CanSatLogData.print("LONG(PHASE5_START):");
+            CanSatLogData.println(gps_longitude, 9);
+            CanSatLogData.flush();
             
             previous_Millis = millis();
             phase_state = 5;
             count = 0;
           }
-
-          /*
 
           current_distance = ultra_distance;
           Serial.println(ultra_distance);
@@ -988,7 +1204,6 @@ void loop(){
 
           break;
         }
-          */
 
 
 
@@ -997,41 +1212,37 @@ void loop(){
         }
 
         // SDカードへデータを保存する
-        Serial2.print(gps_time);
-        Serial2.print(",");
-        Serial2.print(gps_latitude, 9);
-        Serial2.print(",");
-        Serial2.print(gps_longitude, 9);
-        Serial2.print(",");
-        Serial2.print(gps_velocity);
-        Serial2.print(",");
-        Serial2.print(Temperature);
-        Serial2.print(",");
-        Serial2.print(Pressure);
-        Serial2.print(",");
-        Serial2.print(accelX);
-        Serial2.print(",");
-        Serial2.print(accelY);
-        Serial2.print(",");
-        Serial2.print(accelZ);
-        Serial2.print(",");
-        Serial2.print(heading);
-        Serial2.print(",");
-        Serial2.print(headingDegrees);
-        Serial2.print(",");
-        Serial2.print(R);
-        Serial2.print(",");
-        Serial2.print(G);
-        Serial2.print(",");
-        Serial2.print(B);
-        Serial2.print(",");
-        Serial2.println(ultra_distance);
-        Serial2.flush();
+        SensorData.print(gps_time);
+        SensorData.print(",");
+        SensorData.print(gps_latitude, 9);
+        SensorData.print(",");
+        SensorData.print(gps_longitude, 9);
+        SensorData.print(",");
+        SensorData.print(gps_velocity);
+        SensorData.print(",");
+        SensorData.print(Temperature);
+        SensorData.print(",");
+        SensorData.print(Pressure);
+        SensorData.print(",");
+        SensorData.print(accelX);
+        SensorData.print(",");
+        SensorData.print(accelY);
+        SensorData.print(",");
+        SensorData.print(accelZ);
+        SensorData.print(",");
+        SensorData.print(heading);
+        SensorData.print(",");
+        SensorData.print(headingDegrees);
+        SensorData.print(",");
+        SensorData.print(R);
+        SensorData.print(",");
+        SensorData.print(G);
+        SensorData.print(",");
+        SensorData.print(B);
+        SensorData.print(",");
+        SensorData.println(ultra_distance);
+        SensorData.flush();
       }
     }
   }
-      
-    
-      
-     
-}
+} // loop関数の閉じ
