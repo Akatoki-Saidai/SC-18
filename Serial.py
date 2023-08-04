@@ -9,7 +9,7 @@ if True:
 while True:
     ser.write(byte_camera_order)
     rundata = ser.readline().decode("utf-8").rstrip()
-    #with open("/home/nbus/N-BUS_RunReport.txt", "a") as f:
-        #f.write(rundata + "\n")
+    with open("/home/nbus/N-BUS_RunReport.txt", "a") as f:
+        f.write(rundata)
     print(rundata)
 ser.close()
