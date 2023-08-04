@@ -4,12 +4,15 @@ int RX_PIN = 22;
 int TX_PIN = 23;
 
 void setup() {
+  Serial.begin(9600);
   Serial2.begin(19200, SERIAL_8N1, RX_PIN, TX_PIN);
+  Serial.println("on");
 }
 
 void loop() {
-
-  char byte_camera_order = Serial2.read();
+  
+  int camera_order = Serial2.parseInt();
+  //int camera_order = Serial2.read();
   Serial.println(camera_order);
 
     /*
