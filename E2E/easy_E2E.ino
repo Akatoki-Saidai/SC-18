@@ -249,173 +249,196 @@ void loop() {
 
       switch (phase){
         case 0:
-        if(altitude_phasestate == 0){
-          altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
-          Serial.print("altitude0 :");
-          Serial.println(altitude0);
-          Serial.print("altitude :");
-          Serial.println(altitude);
-          if(altitude > altitude0 + 2.0){
-            altitude_phasestate = 1;
+          if(altitude_phasestate == 0){
+            altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+            Serial.print("altitude0 :");
+            Serial.println(altitude0);
+            Serial.print("altitude :");
+            Serial.println(altitude);
+            delay(100);
+            if(altitude > altitude0 + 1.0){
+              altitude_phasestate = 1;
+            }
           }
-        }
-        if(altitude_phasestate == 1){
-          Serial.println("stand-by phase");
-          Serial.println("accelZ");
-          // BNO055からセンサーデータを取得
-          imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
-          double accelZ = accelermetor.z();
-          double accelX = accelermetor.x();
-          double accelY = accelermetor.y();
+          if(altitude_phasestate == 1){
+            Serial.println("stand-by phase");
+            Serial.println("accelZ");
+            // BNO055からセンサーデータを取得
+            imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+            double accelZ = accelermetor.z();
+            double accelX = accelermetor.x();
+            double accelY = accelermetor.y();
         
-          Serial.println(accelX);
-          Serial.println(accelY);
-          Serial.println(accelZ);
-          //Serial2.println(gps.time);
-          stoppage();
-          if(accelXYZ(accelX, accelY, accelZ) >= 15.0){
-            phase_state = 1;
-            altitude_phasestate = 2;
-            Serial.print("falling!");
+            Serial.println(accelX);
+            Serial.println(accelY);
+            Serial.println(accelZ);
+            //Serial2.println(gps.time);
+            stoppage();
+            if(accelXYZ(accelX, accelY, accelZ) >= 20.0){
+              phase_state = 1;
+              altitude_phasestate = 2;
+              Serial.println("falling!");
+            }
           }
-        }
-        if(phase_state == 1){
-          //高度測定
-          altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
-          if(altitude < altitude0 + 2){
-            Serial.println("Go to long phase");
-            delay(5000);
+          if(phase_state == 1){
+            //高度測定
+            altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+            if(altitude < altitude0 + 1.0){
+              Serial.println("Go to long phase");
+              delay(5000);
   
-            phase_state = 2;
-            //ニクロム線を切る
-            /*
-            delay(1000);
-            Serial.print("WARNING: 9v voltage on.\n");
-            digitalWrite(cutparac, HIGH); //オン
-            delay(outputcutsecond * 1000); //十秒間電流を流す
-            Serial.print("WARNING: 9v voltage off.\n");
-            digitalWrite(cutparac, LOW); //オフ
-            */
+              phase_state = 2;
+              //ニクロム線を切る
+              /*
+              delay(1000);
+              Serial.print("WARNING: 9v voltage on.\n");
+              digitalWrite(cutparac, HIGH); //オン
+              delay(outputcutsecond * 1000); //十秒間電流を流す
+              Serial.print("WARNING: 9v voltage off.\n");
+              digitalWrite(cutparac, LOW); //オフ
+              */
             
-            //初期前進
-            accel();
-            delay(2000);
-            brake();
-            delay(2000);
-            phase = 1;
+              //初期前進
+              accel();
+              delay(2000);
+              brake();
+              delay(2000);
+              phase = 1;
+            }
           }
-        }
         break;
 
       
         case 1:
-        // Add your GPS-related code here, using the 'gps' object
-        gps_latitude = gps.location.lat();
-        gps_longitude = gps.location.lng();
-      
-        Serial.print("LAT:");
-        Serial.println(gps.location.lat(), 9);
-        Serial.print("LONG:");
-        Serial.println(gps.location.lng(), 9);
-        Serial.flush();
-        //Serial2.println(gps_time);
-        Serial2.println("transition completed");
-        Serial2.print("LAT(PHASE4_START):");
-        Serial2.println(gps_latitude, 9);
-        Serial2.print("LONG(PHASE4_START):");
-        Serial2.println(gps_longitude, 9);
-        Serial2.flush();
-
-
-        if(phase_state == 2){
+          if(phase_state == 2){
+            Serial.print("LAT:");
+            Serial.println(gps.location.lat(), 9);
+            Serial.print("LONG:");
+            Serial.println(gps.location.lng(), 9);
+            Serial.flush();
+            Serial2.println("transition completed");
+            Serial2.print("LAT(PHASE4_START):");
+            Serial2.println(gps_latitude, 9);
+            Serial2.print("LONG(PHASE4_START):");
+            Serial2.println(gps_longitude, 9);
+            Serial2.flush();
+            Serial.println("calibration start");
+            imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+            rotating();
+            delay(5000);
+            phase_state = 3;
+          }
+          // Add your GPS-related code here, using the 'gps' object
           gps_latitude = gps.location.lat();
           gps_longitude = gps.location.lng();
-          int CurrentDistance = CalculateDis(GOAL_lng, GOAL_lat, gps_longitude, gps_latitude);
-          Serial.print("CurrentDistance=");
-          Serial.println(CurrentDistance);
-          if (desiredDistance >= CurrentDistance){
-            // カラーコーンとの距離が理想値よりも小さい場合は次のフェーズに移行する
-            Serial.println("Go to short phase");
-            phase = 2;
-            phase_state = 3;
-          }else{
-            Serial.println("Continue long_phase");
-            delay(100);
-            accel();
-            delay(2000);
-            Serial.print("LAT:");
-            Serial.println(gps.location.lat(), 9);
-            Serial.print("LONG:");
-            Serial.println(gps.location.lng(), 9);
-            Serial.flush();
-            Serial2.print("LAT:");
-            Serial2.println(gps.location.lat(), 9);
-            Serial2.print("LONG:");
-            Serial2.println(gps.location.lng(), 9);
-            Serial2.flush();
-            delay(3000);
-            brake();
-            Serial.print("LAT:");
-            Serial.println(gps.location.lat(), 9);
-            Serial.print("LONG:");
-            Serial.println(gps.location.lng(), 9);
-            Serial.flush();
-            Serial2.print("LAT:");
-            Serial2.println(gps.location.lat(), 9);
-            Serial2.print("LONG:");
-            Serial2.println(gps.location.lng(), 9);
-            Serial2.flush();
-            delay(1000);
-            stoppage();
-            // Goalまでの偏角を計算する
+      
+
+          if(phase_state == 3){
             gps_latitude = gps.location.lat();
             gps_longitude = gps.location.lng();
-            Angle_Goal = CalculateAngle(GOAL_lng, GOAL_lat, gps_longitude, gps_latitude);
-            Serial.println("degrees calculationning");
-            Serial.print("Angle_Goal :");
-            Serial.println(Angle_Goal);
-            Serial.print("Angle_north :");
-            Serial.println(Angle_north);
-
-            // どちらに回ればいいか計算
-            rrAngle = -Angle_north + Angle_Goal;
-            if (rrAngle < 0){
-              rrAngle += 360;
-            }
-            if (rrAngle > 360){
-              rrAngle -= 360;
-            }
-            llAngle = Angle_north - Angle_Goal;
-            if (llAngle < 0){
-              llAngle += 360;
-            }
-            if (llAngle > 360){
-              llAngle -= 360;
-            }
-
-            if (rrAngle > llAngle){
-              //反時計回り
-              if (llAngle > 20){
-                leftturn();
-                delay(100);
-                rotating();
-                delay(400);
-                stoppage();
-                delay(1000);
-              }
+            int CurrentDistance = CalculateDis(GOAL_lng, GOAL_lat, gps_longitude, gps_latitude);
+            Serial.print("CurrentDistance=");
+            Serial.println(CurrentDistance);
+            if (desiredDistance >= CurrentDistance){
+              // カラーコーンとの距離が理想値よりも小さい場合は次のフェーズに移行する
+              Serial.println("Go to short phase");
+              phase = 2;
+              phase_state = 3;
             }else{
-              //時計回り
-              if (rrAngle > 20){
-                rightturn();
-                delay(100);
-                reverse_rotating();
-                delay(400);
-                stoppage();
-                delay(1000);
+              Serial.println("Continue long_phase");
+              delay(100);
+              /*
+              accel();
+              delay(2000);
+              Serial.print("LAT:");
+              Serial.println(gps.location.lat(), 9);
+              Serial.print("LONG:");
+              Serial.println(gps.location.lng(), 9);
+              Serial.flush();
+              Serial2.print("LAT:");
+              Serial2.println(gps.location.lat(), 9);
+              Serial2.print("LONG:");
+              Serial2.println(gps.location.lng(), 9);
+              Serial2.flush();
+              */
+              brake();
+              delay(2000);
+              Serial.print("LAT:");
+              Serial.println(gps.location.lat(), 9);
+              Serial.print("LONG:");
+              Serial.println(gps.location.lng(), 9);
+              Serial.flush();
+              Serial2.print("LAT:");
+              Serial2.println(gps.location.lat(), 9);
+              Serial2.print("LONG:");
+              Serial2.println(gps.location.lng(), 9);
+              Serial2.flush();
+              delay(100);
+              stoppage();
+              // Goalまでの偏角を計算する
+              gps_latitude = gps.location.lat();
+              gps_longitude = gps.location.lng();
+              Angle_Goal = CalculateAngle(GOAL_lng, GOAL_lat, gps_longitude, gps_latitude);
+              Serial.println("degrees calculationning");
+              Serial.print("Angle_Goal :");
+              Serial.println(Angle_Goal);
+              //北基準機体角度Angle_north
+              imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+              Angle_north = euler.x();
+              //80度右向いてる
+              if(Angle_north <= 280){
+                Angle_north + 80;
+              }else{
+                Angle_north - 280;
+              }
+              Serial.print("Angle_north :");
+              Serial.println(Angle_north);
+              
+              // どちらに回ればいいか計算
+              rrAngle = -Angle_north + Angle_Goal;
+              if (rrAngle < 0){
+                rrAngle += 360;
+              }
+              if (rrAngle > 360){
+                rrAngle -= 360;
+              }
+              llAngle = Angle_north - Angle_Goal;
+              if (llAngle < 0){
+                llAngle += 360;
+              }
+              if (llAngle > 360){
+                llAngle -= 360;
+              }
+              Serial.print("rrAngle :");
+              Serial.println(rrAngle);
+              Serial.print("llAngle :");
+              Serial.println(llAngle);
+
+              if (rrAngle > llAngle){
+                //反時計回り
+                if (llAngle > 20){
+                  Serial.println("left turn");
+                  leftturn();
+                  delay(100);
+                  rotating();
+                  delay(400);
+                  stoppage();
+                  delay(1000);
+                }
+              }else{
+                //時計回り
+                if (rrAngle > 20){
+                  Serial.println("right turn");
+                  rightturn();
+                  delay(100);
+                  reverse_rotating();
+                  delay(400);
+                  stoppage();
+                  delay(1000);
+                }
               }
             }
           }
-        }
         break;
 
 
