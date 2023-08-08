@@ -448,6 +448,7 @@ void loop() {
             Serial2.println("CameraStart");
             Serial.println("Continue short phase");
             int camera_order = Serial2.read();
+            delay(100);
             Serial.print("camera_order :");
             Serial.println(camera_order);
              if (camera_order == 0){
