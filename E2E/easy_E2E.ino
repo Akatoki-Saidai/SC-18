@@ -443,7 +443,6 @@ void loop() {
 
 
         case 2:
-          
 
           if(phase_state == 3){
             Serial2.println("CameraStart");
