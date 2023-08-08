@@ -25,19 +25,9 @@ def red_detect(frame):
     mask2 = cv2.inRange(hsv, hsv_min, hsv_max)
 
     return mask1 + mask2
-
-def camera_rest():
-    camera_sleep += 1
-    if camera_sleep == 400:
-        picam2.close()
-        time.sleep(10)
-        picam2 = Picamera2()
-        picam2.configure(config)
-        picam2.start()
-        #print("camera reset was done ")
-        camera_sleep = 0
-
+    
 def track_red():
+    global camera_order
     if frame_center_x -  50 <= center_x <= frame_center_x + 50:
         #print("赤色物体は画像の中心にあります。")#直進
         camera_order = 1
@@ -73,7 +63,7 @@ picam2.color_effects = None #カラー効果
 
 picam2.rotation = 0 #回転(0～359）
 picam2.hflip = False #水平反転
-picam2.vflip = True #垂直反転
+picam2.vflip = False #垂直反転
 picam2.crop = (0.0, 0.0, 1.0, 1.0) #切り抜き(0.0～1.0)
 camera_sleep = 0
 
@@ -101,12 +91,22 @@ while True:
         picam2.start()
 
         #カメラの休止(熱対策)
-        camera_rest()
+        camera_sleep += 1
+        if camera_sleep == 200:
+            picam2.close()
+            time.sleep(10)
+            picam2 = Picamera2()
+            picam2.configure(config)
+            picam2.start()
+            #print("camera reset was done ")
+            camera_sleep = 0
+
         
 
         # フレームを取得
         #ret, frame = cap.read()
         frame = picam2.capture_array()
+        frame = cv2.rotate(frame, cv2.ROTATE_180)
     
         # 赤色を検出
         mask = red_detect(frame)
@@ -143,9 +143,6 @@ while True:
             # 画像の中心座標
             frame_center_x = frame.shape[1] // 2
 
-        #画像の中に赤色物体がない(ゆっくり時計回りして探す)
-        else:
-            camera_order = 4
 
             #画像の赤色物体の結果からモーターを動かす
             #中心座標のx座標が画像の中心より大きいか小さいか判定
@@ -159,8 +156,13 @@ while True:
                 track_red()
         
 
+        #画像の中に赤色物体がない(ゆっくり時計回りして探す)
+        else:
+            camera_order = 4
+        
+
         #モーターの動作をESPに送信
-        ser.write(camera_order.encode())
+        ser.write(str(camera_order).encode())
 
 
         # 面積のもっとも大きい領域を表示
