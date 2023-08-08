@@ -443,28 +443,31 @@ void loop() {
 
 
         case 2:
-          int kari = 0;
-      
-          if(kari < 1/*コーンの面積が閾値を超える*/){
-            //phase = 3; //finish
-            Serial.println("GOAL GOAL GOAL");
-          }else if(phase_state == 3){
+          
+
+          if(phase_state == 3){
+            Serial2.println("CameraStart")
             Serial.println("Continue short phase");
-            camera_order = Serial2.parseInt();
+            int camera_order = Serial2.read();
             Serial.print("camera_order :");
             Serial.println(camera_order);
              if (camera_order == 0){
-               stoppage();
+               brake();
+               Serial.println("GOAL GOAL GOAL");//コーンの面積が閾値を超えた
+               Serial2.println("GOAL GOAL GOAL");
                delay(2000);
              }else if (camera_order  == 1){
-               brake();
+               forward();
                delay(2000);
              }else if (camera_order == 2){
-               rotating();
+               leftturn();
                delay(100);
              }else if (camera_order == 3){
-               reverse_rotating();
+               rightturn();
                delay(100);
+             }else{
+               slow_rotating();
+               delay(100)
              }
            }
         break;
