@@ -446,7 +446,7 @@ void loop() {
           
 
           if(phase_state == 3){
-            Serial2.println("CameraStart")
+            Serial2.println("CameraStart");
             Serial.println("Continue short phase");
             int camera_order = Serial2.read();
             Serial.print("camera_order :");
