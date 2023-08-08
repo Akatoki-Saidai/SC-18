@@ -460,10 +460,10 @@ void loop() {
                forward();
                delay(2000);
              }else if (camera_order == 2){
-               leftturn();
+               rightturn();
                delay(100);
              }else if (camera_order == 3){
-               rightturn();
+               leftturn();
                delay(100);
              }else{
                slow_rotating();
