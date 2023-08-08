@@ -73,7 +73,7 @@ picam2.color_effects = None #カラー効果
 
 picam2.rotation = 0 #回転(0～359）
 picam2.hflip = False #水平反転
-picam2.vflip = False #垂直反転
+picam2.vflip = True #垂直反転
 picam2.crop = (0.0, 0.0, 1.0, 1.0) #切り抜き(0.0～1.0)
 camera_sleep = 0
 
