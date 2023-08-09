@@ -1,4 +1,3 @@
-#include <DFRobot_QMC5883.h>
 //calculation
 #include <math.h>
 #define rad2deg(a) ((a) / M_PI * 180.0) /*red -> deg*/
@@ -13,9 +12,15 @@ double Angle_gps;
 double Angle_heading;
 double rrAngle, llAngle;
 double Sum_headingDegrees;
+double stuck_lat[2];
+double stuck_lng[2];
+int stuck_number = 0;
+double dif_stuck = 0;
+double sum_stuck = 0;
+double ave_stuck = 0;
 
-double GOAL_lat = 35.86512;
-double GOAL_lng = 139.60740;
+double GOAL_lat = 35.862001667;
+double GOAL_lng = 139.606323333;
 
 double distance; //直進前後でゴールに近づいているかどうかを表す
 double Pre_distance;
@@ -60,6 +65,10 @@ TinyGPSPlus gps;
 //HardwareSerial SerialGPS(1);
 //GPS
 
+//nicromewire
+int cutparac = 23;          //切り離し用トランジスタのピン番号の宣言
+int outputcutsecond = 3;    //切り離し時の9V電圧を流す時間，単位はsecond
+
 double gps_latitude = gps.location.lat();
 double gps_longitude = gps.location.lng();
 
@@ -67,11 +76,6 @@ double gps_longitude = gps.location.lng();
 #include <HardwareSerial.h>
 int RX_PIN = 22;
 int TX_PIN = 23;
-
-
-//bnicromewire
-int cutparac = 23;          //切り離し用トランジスタのピン番号の宣言
-int outputcutsecond = 3;    //切り離し時の9V電圧を流す時間，単位はsecond
 
 
 //motor
@@ -136,8 +140,8 @@ void rightturn()
 void reverse_rotating()
 {
   ledcWrite(0, 0);
-  ledcWrite(1, 140);
-  ledcWrite(2, 140);
+  ledcWrite(1, 100);
+  ledcWrite(2, 100);
   ledcWrite(3, 0);
 }
 
@@ -145,18 +149,25 @@ void reverse_rotating()
 void slow_rotating()
 {
   ledcWrite(0, 0);
-  ledcWrite(1, 90);
-  ledcWrite(2, 90);
+  ledcWrite(1, 50);
+  ledcWrite(2, 50);
   ledcWrite(3, 0);
 }
 
 //反回転
 void rotating()
 {
-  ledcWrite(0, 140);
+  ledcWrite(0, 100);
   ledcWrite(1, 0);
   ledcWrite(2, 0);
-  ledcWrite(3, 140);
+  ledcWrite(3, 100);
+}
+void back()
+{
+  ledcWrite(0, 1000); // channel, duty
+  ledcWrite(1, 0);
+  ledcWrite(2, 1000);
+  ledcWrite(3, 0);
 }
 
 
@@ -198,7 +209,6 @@ void setup(){
     
   Serial.begin(115200);
 
-
   //Raspberry Pi
   Serial2.begin(19200,SERIAL_8N1, RX_PIN, TX_PIN);
 
@@ -213,6 +223,8 @@ void setup(){
   }
   altitude0 = bme.readAltitude(SEALEVELPRESSURE_HPA);
   Serial.println(altitude0);
+  Serial2.print("altitude0 :");
+  Serial2.println(altitude0);
 
   //BNO055
   Wire.begin(21,22);
@@ -221,7 +233,9 @@ void setup(){
     while (1);
   }
 
-  delay(1000);
+  //nicromewire
+  pinMode(cutparac, OUTPUT);      //切り離し用トランジスタの出力宣言
+  digitalWrite(cutparac, LOW);    //切り離し用トランジスタの出力オフ  
 
   //bmotor
   ledcSetup(0, 490, 8);
@@ -233,13 +247,11 @@ void setup(){
   ledcAttachPin(26, 2);
   ledcAttachPin(25, 3);
 
-  //nicromewire
-  pinMode(cutparac, OUTPUT);      //切り離し用トランジスタの出力宣言
-  digitalWrite(cutparac, LOW);    //切り離し用トランジスタの出力オフ
     
 }
 
 void loop() {
+  digitalWrite(cutparac, LOW); //オフ
   
   while (Serial1.available() > 0) {
     char c = Serial1.read();
@@ -247,9 +259,12 @@ void loop() {
     if (gps.location.isUpdated()){
       //こっからスタート
 
+      digitalWrite(cutparac, LOW); //オフ
+      
       switch (phase){
         case 0:
           if(altitude_phasestate == 0){
+            digitalWrite(cutparac, LOW);
             altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
             Serial.print("altitude0 :");
             Serial.println(altitude0);
@@ -257,11 +272,15 @@ void loop() {
             Serial.println(altitude);
             delay(100);
             if(altitude > altitude0 + 1.0){
+              Serial2.print("altitude :");
+              Serial2.println(altitude);
               altitude_phasestate = 1;
             }
           }
           if(altitude_phasestate == 1){
+            digitalWrite(cutparac, LOW);
             Serial.println("stand-by phase");
+            Serial2.println("stand-by phase");
             Serial.println("accelZ");
             // BNO055からセンサーデータを取得
             imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
@@ -277,26 +296,33 @@ void loop() {
             if(accelXYZ(accelX, accelY, accelZ) >= 20.0){
               phase_state = 1;
               altitude_phasestate = 2;
+              Serial2.print("accel :");
+              Serial2.print(accelXYZ(accelX, accelY, accelZ));
+              Serial2.print("   ");
+              Serial2.println("falling");
               Serial.println("falling!");
             }
           }
           if(phase_state == 1){
             //高度測定
+            digitalWrite(cutparac, LOW);
             altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
             if(altitude < altitude0 + 1.0){
               Serial.println("Go to long phase");
-              delay(5000);
-  
+              Serial2.print("altitude :");
+              Serial2.println(altitude);
               phase_state = 2;
               //ニクロム線を切る
-              /*
-              delay(1000);
-              Serial.print("WARNING: 9v voltage on.\n");
+              
+              delay(10000);
+              Serial.println("WARNING: 9v voltage on.\n");
+              Serial2.println("WARNING: 9v voltage on.\n");
               digitalWrite(cutparac, HIGH); //オン
-              delay(outputcutsecond * 1000); //十秒間電流を流す
-              Serial.print("WARNING: 9v voltage off.\n");
+              delay(outputcutsecond*4000);//十秒間電流を流す
+              Serial.println("WARNING: 9v voltage off.\n");
+              Serial2.println("WARNING: 9v voltage off.\n");
               digitalWrite(cutparac, LOW); //オフ
-              */
+              delay(1000);
             
               //初期前進
               accel();
@@ -311,15 +337,16 @@ void loop() {
       
         case 1:
           if(phase_state == 2){
+            digitalWrite(cutparac, LOW);
             Serial.print("LAT:");
             Serial.println(gps.location.lat(), 9);
             Serial.print("LONG:");
             Serial.println(gps.location.lng(), 9);
             Serial.flush();
             Serial2.println("transition completed");
-            Serial2.print("LAT(PHASE4_START):");
+            Serial2.print("LAT(LONGPHASE_START):");
             Serial2.println(gps_latitude, 9);
-            Serial2.print("LONG(PHASE4_START):");
+            Serial2.print("LONG(LONGPHASE_START):");
             Serial2.println(gps_longitude, 9);
             Serial2.flush();
             Serial.println("calibration start");
@@ -334,45 +361,56 @@ void loop() {
       
 
           if(phase_state == 3){
+            digitalWrite(cutparac, LOW);
             gps_latitude = gps.location.lat();
             gps_longitude = gps.location.lng();
             int CurrentDistance = CalculateDis(GOAL_lng, GOAL_lat, gps_longitude, gps_latitude);
             Serial.print("CurrentDistance=");
             Serial.println(CurrentDistance);
+            Serial2.print("CurrentDistance=");
+            Serial2.println(CurrentDistance);
             if (desiredDistance >= CurrentDistance){
               // カラーコーンとの距離が理想値よりも小さい場合は次のフェーズに移行する
               Serial.println("Go to short phase");
               phase = 2;
               phase_state = 3;
+              Serial2.println("CameraStart");
             }else{
               Serial.println("Continue long_phase");
               delay(100);
-              /*
-              accel();
-              delay(2000);
-              Serial.print("LAT:");
-              Serial.println(gps.location.lat(), 9);
-              Serial.print("LONG:");
-              Serial.println(gps.location.lng(), 9);
-              Serial.flush();
-              Serial2.print("LAT:");
-              Serial2.println(gps.location.lat(), 9);
-              Serial2.print("LONG:");
-              Serial2.println(gps.location.lng(), 9);
-              Serial2.flush();
-              */
               brake();
               delay(2000);
               Serial.print("LAT:");
               Serial.println(gps.location.lat(), 9);
+              stuck_lat[stuck_number] = gps.location.lat();
               Serial.print("LONG:");
               Serial.println(gps.location.lng(), 9);
+              stuck_lng[stuck_number] = gps.location.lng();
               Serial.flush();
               Serial2.print("LAT:");
               Serial2.println(gps.location.lat(), 9);
               Serial2.print("LONG:");
               Serial2.println(gps.location.lng(), 9);
               Serial2.flush();
+              stuck_number += 1;
+              if(stuck_number > 2){
+                for(int i = 0; i <= 2; i++){
+                  sum_stuck += (stuck_lat[i] + stuck_lng[i]);
+                }
+                ave_stuck = sum_stuck / 3;
+                dif_stuck = ave_stuck - (gps.location.lat() + gps.location.lng());
+                if(dif_stuck < 0.00005){
+                  back();
+                  delay(3000);
+                  rotating();
+                  delay(1000);
+                  forward();
+                  delay(500);
+                  brake();
+                  delay(2000);
+                }
+                stuck_number = 0;
+              }
               delay(100);
               stoppage();
               // Goalまでの偏角を計算する
@@ -386,11 +424,13 @@ void loop() {
               imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
               Angle_north = euler.x();
               //80度右向いてる
+              
               if(Angle_north <= 280){
-                Angle_north + 80;
+                Angle_north += 80;
               }else{
-                Angle_north - 280;
+                Angle_north -= 280;
               }
+              
               Serial.print("Angle_north :");
               Serial.println(Angle_north);
               
@@ -443,12 +483,12 @@ void loop() {
 
 
         case 2:
+          
 
           if(phase_state == 3){
-            Serial2.println("CameraStart");
+            digitalWrite(cutparac, LOW);
             Serial.println("Continue short phase");
             int camera_order = Serial2.read();
-            delay(100);
             Serial.print("camera_order :");
             Serial.println(camera_order);
              if (camera_order == 0){
@@ -456,6 +496,7 @@ void loop() {
                Serial.println("GOAL GOAL GOAL");//コーンの面積が閾値を超えた
                Serial2.println("GOAL GOAL GOAL");
                delay(2000);
+               phase = 3;
              }else if (camera_order  == 1){
                forward();
                delay(2000);
@@ -467,16 +508,16 @@ void loop() {
                delay(100);
              }else{
                slow_rotating();
-               delay(100)
+               delay(100);
              }
            }
         break;
-        /*
+        
         case 3:
           stoppage();
           delay(10);
         break;
-        */
+        
       }
     }
   }
