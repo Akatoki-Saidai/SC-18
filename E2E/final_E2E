@@ -293,7 +293,7 @@ void loop() {
             Serial.println(accelZ);
             //Serial2.println(gps.time);
             stoppage();
-            if(accelXYZ(accelX, accelY, accelZ) >= 15.0){
+            if(accelXYZ(accelX, accelY, accelZ) >= 14.0){
               phase_state = 1;
               altitude_phasestate = 2;
               Serial2.print("accel :");
