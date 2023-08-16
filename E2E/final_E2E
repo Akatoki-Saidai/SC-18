@@ -74,7 +74,7 @@ double gps_longitude = gps.location.lng();
 
 //Raspberry Pi 通信
 #include <HardwareSerial.h>
-int RX_PIN = 22;
+int RX_PIN = 3;
 int TX_PIN = 23;
 
 
