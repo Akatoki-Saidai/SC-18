@@ -484,7 +484,6 @@ void loop() {
 
           if(phase_state == 3){
             Serial.println("Continue short phase");
-            Serial2.println("CameraStart");//カメラ起動命令
             delay(500);
             char camera_order = Serial2.read();
             Serial.print("camera_order :");
@@ -496,6 +495,7 @@ void loop() {
                delay(2000);
                phase = 3;
              }else if (camera_order == 1 or camera_order == 11 or camera_order == 111);
+               forward();
                delay(2000);
              }else if (camera_order == 2 or camera_order == 22 or camera_order == 222){
                rightturn();
