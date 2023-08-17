@@ -4,12 +4,11 @@ from picamera2 import Picamera2
 import time
 import serial
 
-
 #シリアルポート開放
 ser = serial.Serial('/dev/ttyAMA0', 19200, timeout=10)
 
 
-#赤色検知関数の定義
+#赤色検知関数
 def red_detect(frame):
     # HSV色空間に変換
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -25,19 +24,6 @@ def red_detect(frame):
     mask2 = cv2.inRange(hsv, hsv_min, hsv_max)
 
     return mask1 + mask2
-    
-def track_red():
-    global camera_order
-    if frame_center_x -  50 <= center_x <= frame_center_x + 50:
-        #print("赤色物体は画像の中心にあります。")#直進
-        camera_order = 1
-    elif center_x > frame_center_x + 50:
-        #print("赤色物体は画像の右側にあります。")#右へ
-        camera_order = 2
-    elif center_x < frame_center_x - 50:
-        #print("赤色物体は画像の左側にあります。")#左へ
-        camera_order = 3
-            
 
 
 #カメラの設定
@@ -100,7 +86,6 @@ while True:
             picam2.start()
             #print("camera reset was done ")
             camera_sleep = 0
-
         
 
         # フレームを取得
@@ -153,7 +138,15 @@ while True:
             elif area < 20:
                 camera_order = 4 #標的が小さすぎる(ゆっくり時計回りして探す)
             else:
-                track_red()
+                if frame_center_x -  50 <= center_x <= frame_center_x + 50:
+                    #print("赤色物体は画像の中心にあります。")#直進
+                    camera_order = 1
+                elif center_x > frame_center_x + 50:
+                    #print("赤色物体は画像の右側にあります。")#右へ
+                    camera_order = 2
+                elif center_x < frame_center_x - 50:
+                    #print("赤色物体は画像の左側にあります。")#左へ
+                    camera_order = 3
         
 
         #画像の中に赤色物体がない(ゆっくり時計回りして探す)
