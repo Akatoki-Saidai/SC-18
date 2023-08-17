@@ -19,8 +19,8 @@ double dif_stuck = 0;
 double sum_stuck = 0;
 double ave_stuck = 0;
 
-double GOAL_lat = 35.860640000;
-double GOAL_lng = 139.606205000;
+double GOAL_lat = 40.142621667;
+double GOAL_lng = 139.987548333;
 
 double distance; //直進前後でゴールに近づいているかどうかを表す
 double Pre_distance;
@@ -261,6 +261,7 @@ void loop() {
     char c = Serial1.read();
     gps.encode(c);
     if (gps.location.isUpdated()){
+    //if(1 == 1){
       //こっからスタート
       
       switch (phase){
