@@ -507,15 +507,15 @@ void loop() {
                slow_rotating();
                delay(100);
              }
-           }
         break;
         
         case 3:
           stoppage();
           delay(10);
+          
         break;
-        
-      }
+        }
+      } 
     }
-  }
 }
+
