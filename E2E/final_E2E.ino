@@ -273,15 +273,22 @@ void loop() {
             Serial.println(altitude);
             delay(100);
             if(altitude > altitude0 + 1.0){
+              Serial2.println("altitude of ground :");
+              Serila2.println(altitude0);
               Serial2.print("altitude :");
-              Serial2.println(altitude);
+              Serial2.print(altitude);
+              Serial2.print("   ");
+              Serial2.println("rising");
               Serial2.println("stand-by phase");
               altitude_phasestate = 1;
             }
           }
           if(altitude_phasestate == 1){
+            altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
             Serial.println("stand-by phase");
             Serial.println("accelZ");
+            Serial2.print("altitude :");
+            Serila2.println(altitude);
             // BNO055からセンサーデータを取得
             imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
             double accelZ = accelermetor.z();
@@ -306,10 +313,16 @@ void loop() {
           if(phase_state == 1){
             //高度測定
             altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
+            Serial2.print("altitude :");
+            Serial2.println(altitude);
+            Serial2.print("accel :");
+            Serial2.print(accelXYZ(accelX, accelY, accelZ));
             if(altitude < altitude0 + 1.0){
               Serial.println("Go to long phase");
               Serial2.print("altitude :");
               Serial2.println(altitude);
+              Serial2.print("   ");
+              Serial2.println("landed");
               phase_state = 2;
               //ニクロム線を切る
               
@@ -318,7 +331,7 @@ void loop() {
               Serial2.println("WARNING: 9v voltage on.");
               delay(300);
               digitalWrite(cutparac, HIGH); //オン
-              delay(outputcutsecond*5000);//十秒間電流を流す
+              delay(outputcutsecond*2000);//2秒間電流を流す
               Serial.println("WARNING: 9v voltage off.");
               digitalWrite(cutparac, LOW); //オフ
               delay(1000);
@@ -383,6 +396,7 @@ void loop() {
             if (desiredDistance >= CurrentDistance){
               // カラーコーンとの距離が理想値よりも小さい場合は次のフェーズに移行する
               Serial.println("Go to short phase");
+              Serial2.println("Go to short phase");
               phase = 2;
               phase_state = 3;
               Serial2.println("CameraStart");
@@ -431,6 +445,8 @@ void loop() {
               Serial.println("degrees calculationning");
               Serial.print("Angle_Goal :");
               Serial.println(Angle_Goal);
+              Serial2.print("Angle_Goal :");
+              Serial2.println(Angle_Goal);
               //北基準機体角度Angle_north
               imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
               Angle_north = euler.x();
@@ -444,6 +460,8 @@ void loop() {
               
               Serial.print("Angle_north :");
               Serial.println(Angle_north);
+              Serial2.print("Angle_north :");
+              Serial2.println(Angle_north);
               
               // どちらに回ればいいか計算
               rrAngle = -Angle_north + Angle_Goal;
@@ -464,11 +482,16 @@ void loop() {
               Serial.println(rrAngle);
               Serial.print("llAngle :");
               Serial.println(llAngle);
+              Serial2.print("rrAngle :");
+              Serial2.println(rrAngle);
+              Serial2.print("llAngle :");
+              Serial2.println(llAngle);
 
               if (rrAngle > llAngle){
                 //反時計回り
                 if (llAngle > 20){
                   Serial.println("left turn");
+                  Serial2.println("left turn");
                   leftturn();
                   delay(100);
                   rotating();
@@ -480,6 +503,7 @@ void loop() {
                 //時計回り
                 if (rrAngle > 20){
                   Serial.println("right turn");
+                  Serial2.println("right turn");
                   rightturn();
                   delay(100);
                   reverse_rotating();
@@ -509,6 +533,7 @@ void loop() {
 
             Serial.print("camera_order :");
             Serial.println(camera_order);
+            Serial2.print("red object :");
              if (camera_order == 0 or camera_order == 00 or camera_order == 000){
                brake();
                Serial.println("GOAL GOAL GOAL");//コーンの面積が閾値を超えた
@@ -517,15 +542,27 @@ void loop() {
                phase = 3;
              }else if (camera_order == 1 or camera_order == 11 or camera_order == 111);
                forward();
-               delay(2000);
+               Serial2.println("middle");
+               Serial.println("forward");
+               Serial2.println("forward");
+               delay(100);
              }else if (camera_order == 2 or camera_order == 22 or camera_order == 222){
                rightturn();
+               Serial2.println("right");
+               Serial.println("right turn");
+               Serial2.println("right turn");
                delay(100);
              }else if (camera_order == 3 or camera_order == 33 or camera_order == 333){
                leftturn();
+               Serial2.println("left");
+               Serial.println("left turn");
+               Serial2.println("left turn");
                delay(100);
              }else{
                slow_rotating();
+               Serial.println("serching red object...");
+               Serial2.println("not detected");
+               Serial2.println("serching red object");
                delay(100);
              }
         break;
