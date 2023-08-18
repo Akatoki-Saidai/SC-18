@@ -256,10 +256,11 @@ void setup(){
 
 void loop() {
   
-  while (Serial1.available() > 0) {
+  while (Serial1.available() >= 0) {
     char c = Serial1.read();
     gps.encode(c);
-    if (gps.location.isUpdated()){
+    //if (gps.location.isUpdated()){
+    if(1 == 1){
       //こっからスタート
       
       switch (phase){
@@ -273,8 +274,8 @@ void loop() {
             Serial.println(altitude);
             delay(100);
             if(altitude > altitude0 + 1.0){
-              Serial2.println("altitude of ground :");
-              Serila2.println(altitude0);
+              Serial2.print("altitude of ground :");
+              Serial2.println(altitude0);
               Serial2.print("altitude :");
               Serial2.print(altitude);
               Serial2.print("   ");
@@ -284,11 +285,8 @@ void loop() {
             }
           }
           if(altitude_phasestate == 1){
-            altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
             Serial.println("stand-by phase");
             Serial.println("accelZ");
-            Serial2.print("altitude :");
-            Serila2.println(altitude);
             // BNO055からセンサーデータを取得
             imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
             double accelZ = accelermetor.z();
@@ -315,8 +313,6 @@ void loop() {
             altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
             Serial2.print("altitude :");
             Serial2.println(altitude);
-            Serial2.print("accel :");
-            Serial2.print(accelXYZ(accelX, accelY, accelZ));
             if(altitude < altitude0 + 1.0){
               Serial.println("Go to long phase");
               Serial2.print("altitude :");
@@ -354,7 +350,11 @@ void loop() {
           unsigned long time;
           delay(100);
           time = millis();
-          if(time >= 300000  && phase_state !=2){
+          //Serial2.print("time :");
+          //Serial2.println(time);
+          if(time >= 600000  && phase_state !=2){
+            Serial.println("forced transition was done");
+            Serial2.println("forced transition was done");
             phase_state = 1;
           }
 
