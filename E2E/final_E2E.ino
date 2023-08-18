@@ -19,8 +19,8 @@ double dif_stuck = 0;
 double sum_stuck = 0;
 double ave_stuck = 0;
 
-double GOAL_lat = 35.860640000;
-double GOAL_lng = 139.606205000;
+double GOAL_lat = 40.142621667;
+double GOAL_lng = 139.987548333;
 
 double distance; //直進前後でゴールに近づいているかどうかを表す
 double Pre_distance;
@@ -49,7 +49,6 @@ float pressure;
 float humid;
 float altitude;//高度
 
-
 //BNO055
 #include <Wire.h>
 #include <Adafruit_BNO055.h>
@@ -74,7 +73,7 @@ double gps_longitude = gps.location.lng();
 
 //Raspberry Pi 通信
 #include <HardwareSerial.h>
-int RX_PIN = 22;
+int RX_PIN = 3;
 int TX_PIN = 23;
 
 
@@ -265,6 +264,7 @@ void loop() {
       
       switch (phase){
         case 0:
+
           if(altitude_phasestate == 0){
             altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
             Serial.print("altitude0 :");
@@ -275,12 +275,12 @@ void loop() {
             if(altitude > altitude0 + 1.0){
               Serial2.print("altitude :");
               Serial2.println(altitude);
+              Serial2.println("stand-by phase");
               altitude_phasestate = 1;
             }
           }
           if(altitude_phasestate == 1){
             Serial.println("stand-by phase");
-            Serial2.println("stand-by phase");
             Serial.println("accelZ");
             // BNO055からセンサーデータを取得
             imu::Vector<3> accelermetor = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);
@@ -293,7 +293,7 @@ void loop() {
             Serial.println(accelZ);
             //Serial2.println(gps.time);
             stoppage();
-            if(accelXYZ(accelX, accelY, accelZ) >= 14.0){
+            if(accelXYZ(accelX, accelY, accelZ) >= 15.0){
               phase_state = 1;
               altitude_phasestate = 2;
               Serial2.print("accel :");
@@ -314,14 +314,16 @@ void loop() {
               //ニクロム線を切る
               
               delay(10000);
-              Serial.println("WARNING: 9v voltage on.\n");
-              Serial2.println("WARNING: 9v voltage on.\n");
+              Serial.println("WARNING: 9v voltage on.");
+              Serial2.println("WARNING: 9v voltage on.");
+              delay(300);
               digitalWrite(cutparac, HIGH); //オン
-              delay(outputcutsecond*2500);//十秒間電流を流す
-              Serial.println("WARNING: 9v voltage off.\n");
-              Serial2.println("WARNING: 9v voltage off.\n");
+              delay(outputcutsecond*5000);//十秒間電流を流す
+              Serial.println("WARNING: 9v voltage off.");
               digitalWrite(cutparac, LOW); //オフ
               delay(1000);
+              Serial2.println("WARNING: 9v voltage off.");
+              delay(800);
             
               //初期前進
               accel();
@@ -329,11 +331,23 @@ void loop() {
               brake();
               delay(2000);
               phase = 1;
+              /*phase = 2;
+              phase_state = 3;
+              Serial2.println("CameraStart");*/
+
             }
           }
+          //時間によるフェーズ移行
+          unsigned long time;
+          delay(100);
+          time = millis();
+          if(time >= 300000  && phase_state !=2){
+            phase_state = 1;
+          }
+
         break;
 
-      /*
+      
         case 1:
           if(phase_state == 2){
             Serial.print("LAT:");
@@ -484,9 +498,15 @@ void loop() {
 
           if(phase_state == 3){
             Serial.println("Continue short phase");
-            Serial2.println("CameraStart");//カメラ起動命令
-            delay(500);
-            char camera_order = Serial2.read();
+            delay(3000);
+            if (Serial2.available() > 0){
+              char camera_order = Serial2.read();
+              Serial2.flush();
+            }
+            else{
+              char camera_order = 4;
+            }
+
             Serial.print("camera_order :");
             Serial.println(camera_order);
              if (camera_order == 0 or camera_order == 00 or camera_order == 000){
@@ -496,6 +516,7 @@ void loop() {
                delay(2000);
                phase = 3;
              }else if (camera_order == 1 or camera_order == 11 or camera_order == 111);
+               forward();
                delay(2000);
              }else if (camera_order == 2 or camera_order == 22 or camera_order == 222){
                rightturn();
@@ -507,15 +528,15 @@ void loop() {
                slow_rotating();
                delay(100);
              }
-           }
         break;
         
         case 3:
           stoppage();
           delay(10);
+          
         break;
-        */
-      }
+        }
+      } 
     }
-  }
+}
 
